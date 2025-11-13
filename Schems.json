@@ -1,0 +1,72 @@
+10 million
+5 countries
+User Profile Schema
+{
+"user_id": "string",
+"email": "string",
+"age": integer,
+"country": "string",
+"registration_date": "timestamp",
+"preferences": ["array of categories"]
+}
+100,000 daily
+500 events per second
+Transaction Event Schema
+{
+"transaction_id": "string",
+"user_id": "string",
+"timestamp": "timestamp",
+"products": [{
+"product_id": "string",
+"quantity": integer,
+"price": float
+}],
+"total_amount": float,
+"payment_method": "string",
+}
+Cart Event Schema
+{
+"cart_id": "string",
+"user_id": "string",
+"timestamp": "timestamp",
+"products": [{
+"product_id": "string",
+"quantity": integer,
+"price": float
+}]
+}
+Product View Event Schema
+{
+"product_id": "string",
+"user_id": "string",
+"timestamp": "timestamp",
+"products": [{
+"product_id": "string",
+"quantity": integer,
+"price": float
+}]
+}
+250,000 Products
+100 categories
+Product Catalog Schema
+{
+"product_id": "string",
+"name": "string",
+"category": "string",
+"price": float,
+"inventory": integer,
+"ratings": float
+}
+monitoring dashboard with ingestion rates.
+Real-time transaction monitoring
+Real-time inventory tracking and low-stock alerts
+Session analysis and shopping cart abandonment detection
+Real-time sales metrics aggregation (by hour, category, region)
+Alert notification system for critical events
+Real-time metrics dashboard
+Daily batch jobs for customer segmentation (RFM analysis)
+Product performance analysis
+Sales trend analysis
+Geographic sales distribution visualization
+Product category performance charts
+
