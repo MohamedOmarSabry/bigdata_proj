@@ -37,14 +37,10 @@ Cart Event Schema
 }
 Product View Event Schema
 {
+"event_id": "string",
 "product_id": "string",
 "user_id": "string",
-"timestamp": "timestamp",
-"products": [{
-"product_id": "string",
-"quantity": integer,
-"price": float
-}]
+"timestamp": "timestamp"
 }
 250,000 Products
 100 categories
