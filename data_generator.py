@@ -5,9 +5,9 @@ import random
 import uuid
 from datetime import datetime, timedelta
 import threading
-
+from kafka.admin import KafkaAdminClient, NewTopic
 class GlobalMartProducer:
-    def __init__(self, bootstrap_servers='localhost:9092',config=[]):
+    def __init__(self, bootstrap_servers='localhost:9092',config={}):
         """Initialize Kafka producer with configuration"""
         self.producer = KafkaProducer(
             bootstrap_servers=bootstrap_servers,
@@ -26,22 +26,19 @@ class GlobalMartProducer:
         self.cart_probability=config['cart_probability']
         self.products,self.category_to_products = self.generate_product_catalog()
         self.events_per_sec=config['events_per_second']
-        self.user_error_rate=config.get('user_error_rate',0.01)
-        self.product_view_error_rate=config.get('product_view_error_rate',0.005)
-        self.cart_event_error_rate=config.get('cart_event_error_rate',0.002)
-        self.transaction_event_error_rate=config.get('transaction_event_error_rate',0.001)
-        self.product_error_rate=config.get('product_error_rate',0.001)
+        self.system_error_rate=config.get('system_error_rate',0.001)
         self.running = True
     def failure_injector(self,value,fault_type='missing_field'):
-        if fault_type == 'negative':
-            return -abs(value)
-        elif fault_type == 'missing_field':
-            return None
-        elif fault_type == 'invalid_value':
-            if isinstance(value, (int, float)):
-                return 999999  # absurd numeric
-            elif isinstance(value, str):
-                return "INVALID_VALUE"
+        if random.random() < self.system_error_rate:
+            if fault_type == 'negative':
+                return -abs(value)
+            elif fault_type == 'missing_field':
+                return None
+            elif fault_type == 'invalid_value':
+                if isinstance(value, (int, float)):
+                    return 999999
+                elif isinstance(value, str):
+                    return "INVALID_VALUE"
         else:
             return value
     def generate_user(self):
@@ -58,11 +55,11 @@ class GlobalMartProducer:
         picked = random.sample(range(1, 101), num_categories)
         preferences = [f"category_{c}" for c in picked]
         return {
-            "user_id": user_id,
-            "email": email,
-            "age": age,
-            "country": country,
-            "registration_date": registration_date,
+            "user_id":user_id,
+            "email": self.failure_injector(email,'missing_field'),
+            "age": self.failure_injector(age,'negative'),
+            "country": self.failure_injector(country,'missing_field'),
+            "registration_date": self.failure_injector(registration_date.isoformat(),'missing_field'),
             "preferences": preferences,
         }
     def generate_product_catalog(self):
@@ -107,8 +104,8 @@ class GlobalMartProducer:
 
         if not available:
             return None  # Can't create cart event
-        uuid = str(uuid.uuid4())
-        cart_id = f"cart_{uuid}"
+        cuid = str(uuid.uuid4())
+        cart_id = f"cart_{cuid}"
         random.seed(cart_id)
         timestamp = datetime.now().isoformat()
         cart_products = []
@@ -128,8 +125,8 @@ class GlobalMartProducer:
         }
     def generate_transcation_event(self,user_id=None,products=[]):
         """Generate transcation event data"""
-        uuid = str(uuid.uuid4())
-        transaction_id = f"transaction_{uuid}"
+        tuid = str(uuid.uuid4())
+        transaction_id = f"transaction_{tuid}"
         random.seed(transaction_id)
         timestamp = datetime.now().isoformat()
         total_amount=0
@@ -144,8 +141,8 @@ class GlobalMartProducer:
             "user_id": user_id,
             "timestamp": timestamp,
             "products": products,
-            "total_amount": round(total_amount,2),
-            "payment_method": random.choice(["credit_card", "paypal", "gift_card"])
+            "total_amount": self.failure_injector(round(total_amount,2),'invalid_value'),
+            "payment_method": self.failure_injector(random.choice(["credit_card", "paypal", "gift_card"]),'missing_field')
         }
 
 
@@ -201,7 +198,7 @@ class GlobalMartProducer:
                                 cart_event["products"],
                                 random.randint(1, len(cart_event["products"]))
                             )
-                            transaction_event = self.generate_transaction_event(
+                            transaction_event = self.generate_transcation_event(
                                 user_data["user_id"], purchased
                             )
                             print(
@@ -216,63 +213,69 @@ class GlobalMartProducer:
                             value=transaction_event,
                             timestamp_ms=int(time.time() * 1000)
                             )
-                
-                time.sleep(interval + random.uniform(-0.5, 0.5))
+                jitter = random.uniform(-0.5 * interval, 0.5 * interval)
+                time.sleep(max(0, interval + jitter))
             except Exception as e:
                 print(f"Error producing data: {e}")
                 time.sleep(5)
 
+    
+    def start_simulation(self, num_threads=5, run_seconds=60):
+        """Start multi-threaded GlobalMart event simulation"""
+        print(f"🚀 Starting GlobalMart data simulation with {num_threads} producer threads...")
+        admin = KafkaAdminClient(bootstrap_servers='localhost:9092')
+        topics = [
+            "globalmart.users",
+            "globalmart.product_views",
+            "globalmart.cart_events",
+            "globalmart.transaction_events"
+        ]
+        new_topics = []
+        for t in topics:
+            new_topics.append(NewTopic(name=t, num_partitions=3, replication_factor=1))
+        try:
+            admin.create_topics(new_topics)
+            print("✅ Kafka topics created:")
+            for t in topics:
+                print(f"   • {t}")
+        except:
+            print("ℹ️ Kafka topics already exist")
+        threads = []
+        self.running = True
+        for i in range(num_threads):
+            thread = threading.Thread(
+                target=self.produce_data_stream,
+                args=(1,),
+                daemon=True
+            )
+            thread.start()
+            threads.append(thread)
+        print(f"🧵 Started {num_threads} producer threads")
+        try:
+            time.sleep(run_seconds)
+        except KeyboardInterrupt:
+            print("\n⏹️ Stopping simulation...")
+        finally:
+            print("\n🔻 Shutting down threads...")
+            self.running = False
 
-    # def start_simulation(self, num_sensors=10):
-    #     """Start multi-threaded sensor simulation"""
-    #     print(f"🚀 Starting IoT simulation with {num_sensors} sensors...")
-        
-    #     # Create topic if not exists
-    #     from kafka.admin import KafkaAdminClient, NewTopic
-    #     admin = KafkaAdminClient(bootstrap_servers='localhost:9092')
-    #     try:
-    #         topic = NewTopic(name='iot-sensors', num_partitions=3, replication_factor=1)
-    #         admin.create_topics([topic])
-    #         print("✅ Created topic 'iot-sensors'")
-    #     except:
-    #         print("ℹ️ Topic 'iot-sensors' already exists")
-        
-    #     # Start producer threads
-    #     threads = []
-    #     for i in range(num_sensors):
-    #         thread = threading.Thread(
-    #             target=self.produce_sensor_stream,
-    #             args=(i, random.uniform(0.5, 2))
-    #             #args=(i, random.uniform(5, 10))
-    #         )
-    #         thread.start()
-    #         threads.append(thread)
-        
-    #     try:
-    #         # Run for specified duration
-    #         time.sleep(60)  # Run for 1 minute
-    #     except KeyboardInterrupt:
-    #         print("\n⏹️ Stopping simulation...")
-    #     finally:
-    #         self.running = False
-    #         for thread in threads:
-    #             thread.join()
-    #         self.producer.close()
-    #         print("✅ Simulation stopped")
+            for thread in threads:
+                thread.join()
+
+            self.producer.close()
+            print("✅ GlobalMart simulation stopped")
+
 
 # Run the producer
 if __name__ == "__main__":
     config = {
         'countries': ['USA', 'Canada', 'UK', 'Germany', 'France'],
         'start_date': '2020-01-01',
-        'purchase_probability': 0.116,
-        'cart_probability': 0.02,
+        'purchase_probability': 0.14,
+        'cart_probability': 0.3,
         'events_per_second': 500,
-        'user_error_rate': 0.01,
-        'product_view_error_rate': 0.005,
-        'cart_event_error_rate': 0.002,
-        'transaction_event_error_rate': 0.001,
-        'product_error_rate': 0.001
+        'system_error_rate': 0.001
     }
-    producer = GlobalMartProducer()
+    producer = GlobalMartProducer(config=config)
+    producer.start_simulation(num_threads=5, run_seconds=60)
     #producer.start_simulation(num_sensors=5)
