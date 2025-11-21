@@ -7,14 +7,16 @@ TOPICS = [
     "globalmart.users",
     "globalmart.product_views",
     "globalmart.cart_events",
-    "globalmart.transaction_events"
+    "globalmart.transaction_events",
+    "globalmart.product_catalog",
+    "globalmart.faulty_data"
 ]
 
 def clear():
     os.system("cls" if os.name == "nt" else "clear")
 
 def main():
-    print("📡 Starting GlobalMart Monitoring Consumer...")
+    print("Starting GlobalMart Monitoring Consumer...")
 
     consumer = KafkaConsumer(
         *TOPICS,
@@ -31,8 +33,9 @@ def main():
     topic_counts = {t: 0 for t in TOPICS}
     last_messages = {t: None for t in TOPICS}
     start_time = time.time()
+    events_since_last = 0
     last_update = start_time
-
+    
     try:
         while True:
             msg_pack = consumer.poll(timeout_ms=500)
@@ -45,12 +48,14 @@ def main():
                     topic = msg.topic
                     topic_counts[topic] += 1
                     total_events += 1
+                    events_since_last += 1
                     last_messages[topic] = msg.value
 
             # Update display every 2 seconds
             if now - last_update >= 2:
                 elapsed = now - start_time
-                eps = total_events / elapsed if elapsed > 0 else 0
+                interval = now - last_update
+                eps = events_since_last / interval if interval > 0 else 0
 
                 clear()
                 print("GLOBALMART EVENT MONITOR")
@@ -73,15 +78,15 @@ def main():
                         pretty = json.dumps(last_messages[t], indent=4)
                         for line in pretty.split("\n"):
                             print("  " + line)
-
+                events_since_last = 0
                 last_update = now
 
     except KeyboardInterrupt:
-        print("\n🛑 Stopping monitor...")
+        print("\nStopping monitor...")
 
     finally:
         consumer.close()
-        print("✅ Consumer closed")
+        print("Consumer closed")
 
 
 if __name__ == "__main__":
