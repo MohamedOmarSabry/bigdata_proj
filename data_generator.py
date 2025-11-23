@@ -217,20 +217,13 @@ class GlobalMartProducer:
                     f"{user_data['email']} - {user_data['age']} - "
                     f"{user_data['registration_date']} - {user_data['preferences']}"
                 )
-                if self.validate_generated_data(user_data,type="user"):
-                    self.producer.send(
-                        topic='globalmart.users',
-                        key=user_data['user_id'],
-                        value=user_data,
-                        timestamp_ms=int(time.time() * 1000)
-                    )
-                else:
-                    self.producer.send(
-                        topic='globalmart.faulty_data',
-                        key=user_data['user_id'],
-                        value=user_data,
-                        timestamp_ms=int(time.time() * 1000)
-                    )
+                #user_data["faulty"]=self.validate_generated_data(user_data,type="user")
+                self.producer.send(
+                    topic='globalmart.users',
+                    key=user_data['user_id'],
+                    value=user_data,
+                    timestamp_ms=int(time.time() * 1000)
+                )
                 product_data_L = []
                 for _ in range(random.randint(1,20)):
                     product_view_event = self.generate_product_view(user_data['user_id'],user_preferences=user_data['preferences'])
@@ -245,20 +238,13 @@ class GlobalMartProducer:
                     f"{self.products[product_view_event['product_id']]['price']} - {self.products[product_view_event['product_id']]['inventory']} - "
                     f"{self.products[product_view_event['product_id']]['category']}"
                     )
-                    if self.validate_generated_data(product_view_event,type="product_view"):
-                        self.producer.send(
-                            topic='globalmart.product_views',
-                            key=product_view_event['event_id'],
-                            value=product_view_event,
-                            timestamp_ms=int(time.time() * 1000)
-                        )
-                    else:
-                        self.producer.send(
-                            topic='globalmart.faulty_data',
-                            key=product_view_event['event_id'],
-                            value=product_view_event,
-                            timestamp_ms=int(time.time() * 1000)
-                        )
+                    #if self.validate_generated_data(product_view_event,type="product_view"):
+                    self.producer.send(
+                        topic='globalmart.product_views',
+                        key=product_view_event['event_id'],
+                        value=product_view_event,
+                        timestamp_ms=int(time.time() * 1000)
+                    )
                     self.producer.send(
                         topic='globalmart.product_catalog',
                         key=product_view_event['product_id'],
@@ -274,20 +260,13 @@ class GlobalMartProducer:
                         f"{cart_event['user_id']} - {cart_event['products']} - "
                         f"{cart_event['timestamp']}"
                         )
-                        if self.validate_generated_data(cart_event,type="cart_event"):
-                            self.producer.send(
-                                topic='globalmart.cart_events',
-                                key=cart_event['cart_id'],
-                                value=cart_event,
-                                timestamp_ms=int(time.time() * 1000)
-                            )
-                        else:
-                            self.producer.send(
-                                topic='globalmart.faulty_data',
-                                key=cart_event['cart_id'],
-                                value=cart_event,
-                                timestamp_ms=int(time.time() * 1000)
-                            )
+                        #if self.validate_generated_data(cart_event,type="cart_event"):
+                        self.producer.send(
+                            topic='globalmart.cart_events',
+                            key=cart_event['cart_id'],
+                            value=cart_event,
+                            timestamp_ms=int(time.time() * 1000)
+                        )
                         if random.random() < self.purchase_probability:
                             purchased = random.sample(
                                 cart_event["products"],
@@ -302,20 +281,13 @@ class GlobalMartProducer:
                             f"{transaction_event['total_amount']} - {transaction_event['payment_method']} - "
                             f"{transaction_event['timestamp']}"
                             )
-                            if self.validate_generated_data(transaction_event,type="transaction_event"):
-                                self.producer.send(
-                                    topic='globalmart.transaction_events',
-                                    key=transaction_event['transaction_id'],
-                                    value=transaction_event,
-                                    timestamp_ms=int(time.time() * 1000)
-                                )
-                            else:
-                                self.producer.send(
-                                topic='globalmart.faulty_data',
-                                key=cart_event['cart_id'],
-                                value=cart_event,
+                            #if self.validate_generated_data(transaction_event,type="transaction_event"):
+                            self.producer.send(
+                                topic='globalmart.transaction_events',
+                                key=transaction_event['transaction_id'],
+                                value=transaction_event,
                                 timestamp_ms=int(time.time() * 1000)
-                                )
+                            )
                 jitter = random.uniform(-0.1 * interval, 0.1* interval)
                 time.sleep(max(0, interval + jitter))
             except Exception as e:
@@ -334,8 +306,7 @@ class GlobalMartProducer:
             "globalmart.product_views",
             "globalmart.cart_events",
             "globalmart.transaction_events",
-            "globalmart.product_catalog",
-            "globalmart.faulty_data"
+            "globalmart.product_catalog"
         ]
         new_topics = []
         for t in topics:
