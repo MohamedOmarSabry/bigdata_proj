@@ -8,8 +8,7 @@ TOPICS = [
     "globalmart.product_views",
     "globalmart.cart_events",
     "globalmart.transaction_events",
-    "globalmart.product_catalog",
-    "globalmart.faulty_data"
+    "globalmart.product_catalog"
 ]
 
 def clear():
