@@ -227,6 +227,9 @@ class GlobalMartProducer:
                 product_data_L = []
                 for _ in range(random.randint(1,20)):
                     product_view_event = self.generate_product_view(user_data['user_id'],user_preferences=user_data['preferences'])
+                    product_id = product_view_event['product_id']
+                    product_payload = self.products[product_id].copy()
+                    product_payload["product_id"] = product_id
                     product_data_L.append(product_view_event['product_id'])
                     print(
                     f"Product View: {product_view_event['event_id']} - "
@@ -234,9 +237,9 @@ class GlobalMartProducer:
                     f"{product_view_event['timestamp']}"
                     )
                     print(
-                    f"Product: {product_view_event['product_id']} - "
-                    f"{self.products[product_view_event['product_id']]['price']} - {self.products[product_view_event['product_id']]['inventory']} - "
-                    f"{self.products[product_view_event['product_id']]['category']}"
+                    f"Product: {product_payload['product_id']} - "
+                    f"{product_payload['price']} - {product_payload['inventory']} - "
+                    f"{product_payload['category']}"
                     )
                     #if self.validate_generated_data(product_view_event,type="product_view"):
                     self.producer.send(
@@ -247,8 +250,8 @@ class GlobalMartProducer:
                     )
                     self.producer.send(
                         topic='globalmart.product_catalog',
-                        key=product_view_event['product_id'],
-                        value=self.products[product_view_event['product_id']],
+                        key=product_id,
+                        value=product_payload,
                         timestamp_ms=int(time.time() * 1000)
                     )
                     #Stream product
