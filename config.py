@@ -9,6 +9,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # PATH CONFIGURATIONS FOR ENTIRE PIPELINE
 PATHS = {
+
+    # TODO: Check with what we willl do for data warehouse and so on 
     # Main data directories
     'base_dir': os.path.join(BASE_DIR, 'data'),
     'clean_data': os.path.join(BASE_DIR, 'data', 'clean'),
@@ -188,12 +190,12 @@ def create_directories():
 if __name__ == "__main__":
     # Test: create directories and print configuration
     create_directories()
-    print("\n" + "="*60)
-    print("CONFIGURATION SUMMARY")
-    print("="*60)
-    print(f"\nBase Directory: {BASE_DIR}")
-    print(f"\nKafka Bootstrap: {KAFKA_CONFIG['bootstrap_servers']}")
-    print(f"\nTransaction Anomaly Threshold: ${ANOMALY_DETECTION['transaction']['max_amount']}")
-    print(f"Low Stock Threshold: {ANOMALY_DETECTION['inventory']['low_stock_threshold']} units")
-    print(f"Cart Abandonment Timeout: {ANOMALY_DETECTION['cart_abandonment']['timeout_minutes']} minutes")
-    print("\n" + "="*60)
+    # print("\n" + "="*60)
+    # print("CONFIGURATION SUMMARY")
+    # print("="*60)
+    # print(f"\nBase Directory: {BASE_DIR}")
+    # print(f"\nKafka Bootstrap: {KAFKA_CONFIG['bootstrap_servers']}")
+    # print(f"\nTransaction Anomaly Threshold: ${ANOMALY_DETECTION['transaction']['max_amount']}")
+    # print(f"Low Stock Threshold: {ANOMALY_DETECTION['inventory']['low_stock_threshold']} units")
+    # print(f"Cart Abandonment Timeout: {ANOMALY_DETECTION['cart_abandonment']['timeout_minutes']} minutes")
+    # print("\n" + "="*60)

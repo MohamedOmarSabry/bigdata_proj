@@ -16,13 +16,16 @@ import json
 import shutil, os
 from pyspark.sql.functions import explode
 
-def create_spark_session():
-    """Create Spark session"""
-    return SparkSession.builder \
-        .appName("Global Mart Stream Processing") \
-        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0") \
-        .config("spark.sql.streaming.checkpointLocation", "file:///tmp/global-mart-stream") \
-        .getOrCreate()
+from config import PATHS
+from data_quality import (
+    validate_users,
+    validate_products,
+    validate_views,
+    validate_carts,
+    validate_transactions
+)
+
+# Schema Definitions
 def define_user_schema():
     return StructType([
         StructField("user_id", StringType(), True),
@@ -68,7 +71,101 @@ def define_transaction_schema():
         StructField("payment_method", StringType(), True),
         StructField("products", ArrayType(define_cart_product_schema()), True)
     ])
-def store_data_disk():
+
+# Create Spark Session
+
+def create_spark_session():
+    """Create Spark session"""
+    return SparkSession.builder \
+        .appName("Global Mart Stream Processing") \
+        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0") \
+        .config("spark.sql.streaming.checkpointLocation", "file:///tmp/global-mart-stream") \
+        .getOrCreate()
+
+# Processing Functions - read from Kafka, validate using functions from data_quality, then write to disk in designated folders
+
+def process_user_batch(batch_df, batch_id):
+    """Process user data batch"""
+    if batch_df.count() > 0:
+        # Apply data quality validation
+        clean_df, quarantine_df = validate_users(batch_df)
+
+        # Write clean data
+        clean_df.write.mode("append").parquet(PATHS['clean_users'])
+
+        # Write quarantined data
+        if quarantine_df.count() > 0:
+            quarantine_df.write.mode("append").parquet(PATHS['quarantine_users'])
+            print(f"[Batch {batch_id}] Users: {quarantine_df.count()} records quarantined")
+
+        print(f"[Batch {batch_id}] Users: {clean_df.count()} clean records written")
+
+def process_product_batch(batch_df, batch_id):
+    """Process product data batch"""
+    if batch_df.count() > 0:
+        # Apply data quality validation
+        clean_df, quarantine_df = validate_products(batch_df)
+
+        # Write clean data
+        clean_df.write.mode("append").parquet(PATHS['clean_products'])
+
+        # Write quarantined data
+        if quarantine_df.count() > 0:
+            quarantine_df.write.mode("append").parquet(PATHS['quarantine_products'])
+            print(f"[Batch {batch_id}] Products: {quarantine_df.count()} records quarantined")
+
+        print(f"[Batch {batch_id}] Products: {clean_df.count()} clean records written")
+
+def process_view_batch(batch_df, batch_id):
+    """Process product view data batch"""
+    if batch_df.count() > 0:
+        # Apply data quality validation
+        clean_df, quarantine_df = validate_views(batch_df)
+
+        # Write clean data
+        clean_df.write.mode("append").parquet(PATHS['clean_views'])
+
+        # Write quarantined data
+        if quarantine_df.count() > 0:
+            quarantine_df.write.mode("append").parquet(PATHS['quarantine_views'])
+            print(f"[Batch {batch_id}] Views: {quarantine_df.count()} records quarantined")
+
+        print(f"[Batch {batch_id}] Views: {clean_df.count()} clean records written")
+
+def process_cart_batch(batch_df, batch_id):
+    """Process cart data batch"""
+    if batch_df.count() > 0:
+        # Apply data quality validation
+        clean_df, quarantine_df = validate_carts(batch_df)
+
+        # Write clean data
+        clean_df.write.mode("append").parquet(PATHS['clean_carts'])
+
+        # Write quarantined data
+        if quarantine_df.count() > 0:
+            quarantine_df.write.mode("append").parquet(PATHS['quarantine_carts'])
+            print(f"[Batch {batch_id}] Carts: {quarantine_df.count()} records quarantined")
+
+        print(f"[Batch {batch_id}] Carts: {clean_df.count()} clean records written")
+    
+def process_transaction_batch(batch_df, batch_id):
+    """Process transaction data batch"""
+    if batch_df.count() > 0:
+        # Apply data quality validation
+        clean_df, quarantine_df = validate_transactions(batch_df)
+
+        # Write clean data
+        clean_df.write.mode("append").parquet(PATHS['clean_transactions'])
+
+        # Write quarantined data
+        if quarantine_df.count() > 0:
+            quarantine_df.write.mode("append").parquet(PATHS['quarantine_transactions'])
+            print(f"[Batch {batch_id}] Transactions: {quarantine_df.count()} records quarantined")
+
+        print(f"[Batch {batch_id}] Transactions: {clean_df.count()} clean records written")
+
+# Main Streaming Pipeline
+def start_streaming_pl():
     print("\n" + "="*60)
     print("Starting Spark Streaming Backend")
     print("="*60)
