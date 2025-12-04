@@ -6,9 +6,9 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
     col, when, lit, current_timestamp, window,
     sum as spark_sum, count, avg, max as spark_max, min as spark_min,
-    explode, hour, date_format
+    explode, hour, date_format, countDistinct, stddev
 )
-from config import ANOMALY_DETECTION, ALERT_CONFIG
+from config import ANOMALY_DETECTION, ALERT_CONFIG, PATHS
 import json
 from datetime import datetime
 
@@ -108,7 +108,6 @@ class RealTimeAnalytics:
 
         # Log to file if enabled
         if 'file' in self.alert_config['notification_methods']:
-            from config import PATHS
             with open(PATHS['alerts_log'], 'a') as f:
                 f.write(json.dumps(alert) + '\n')
 
@@ -162,23 +161,59 @@ class RealTimeAnalytics:
                     message=message,
                     data=data
                 )
+            
+    # SALES AGGREGATION
+
+    def aggregate_sales_by_hour(self, df: DataFrame) -> DataFrame:
+        """
+        Aggregate comprehensive sales metrics by hour
+        Return multiple metrics including revenue, customer, and statistical measures
+        """
+
+        hourly_sales = df.withColumn("hour", hour(col("timestamp"))) \
+            .groupBy("hour") \
+            .agg(
+                # Revenue metrics
+                spark_sum("total_amount").alias("total_sales"),
+                count("transaction_id").alias("transaction_count"),
+                avg("total_amount").alias("avg_transaction_value"),
+
+                # Statistical metrics
+                spark_min("total_amount").alias("min_transaction_value"),
+                spark_max("total_amount").alias("max_transaction_value"),
+                stddev("total_amount").alias("stddev_transaction_value"),
+
+                # Customer metrics
+                countDistinct("user_id").alias("unique_customers"),
+                (count("transaction_id") / countDistinct("user_id")).alias("avg_transactions_per_customer"),
+
+            ) \
+            .withColumn("sales_velocity", col("total_sales") / lit(3600))  # Sales per second in that hour
+
+        return hourly_sales
+
+   
 
 
-# Abstracted Functions
+# ==================== CONVENIENCE FUNCTIONS ====================
 
 def detect_transaction_anomalies(df: DataFrame) -> DataFrame:
+    """Detect amount-based transaction anomalies"""
     analyzer = RealTimeAnalytics()
     return analyzer.detect_amount_based_anomalies(df)
 
 def detect_low_inventory(df: DataFrame) -> DataFrame:
+    """Detect low inventory products"""
     analyzer = RealTimeAnalytics()
     return analyzer.detect_low_inventory(df)
 
 def generate_transaction_alerts(df: DataFrame):
+    """Generate alerts for transaction anomalies"""
     analyzer = RealTimeAnalytics()
     analyzer.process_transaction_alerts(df)
 
 def generate_inventory_alerts(df: DataFrame):
+    """Generate alerts for low inventory"""
     analyzer = RealTimeAnalytics()
     analyzer.process_inventory_alerts(df)
 
