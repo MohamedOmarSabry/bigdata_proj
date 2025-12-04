@@ -19,6 +19,7 @@ class DataQualityValidator:
     Main Class that is made to validate and clean data according to the defined rules, used by functions below
     """
 
+    # initialize the parameters for validation using the set configurations
     def __init__(self):
         self.config = DATA_QUALITY
         self.valid_countries = self.config['valid_domains']['countries']
@@ -228,3 +229,39 @@ class DataQualityValidator:
 
         # Split into clean and quarantine
         return self.split_clean_quarantine(df)
+
+
+    # PRODUCT VIEW DATA VALIDATION
+
+    def clean_view_data(self, df: DataFrame):
+        """
+        Validate and clean product view event data
+        """
+        # Add quality metadata via helper func
+        df = self.add_quality_metadata(df)
+
+        # apply corrections that were defined using the helper function
+        df = self.apply_fixable_corrections(df, "event_id", "string")
+        df = self.apply_fixable_corrections(df, "product_id", "string")
+        df = self.apply_fixable_corrections(df, "user_id", "string")
+        df = self.apply_fixable_corrections(df, "timestamp", "timestamp")
+
+        # check required fields to see if there are missing fields (in that case it should be flagged as error)
+        required_fields = self.config['required_fields']['view']
+        for field in required_fields:
+            df = self.mark_error(
+                df,
+                col(field).isNull(),
+                f"missing_required_field: {field}"
+            )
+
+        # Validate timestamp format
+        df = self.mark_error(
+            df,
+            to_timestamp(col("timestamp")).isNull() & col("timestamp").isNotNull(),
+            "invalid_date_format: timestamp"
+        )
+
+        # Split into clean and quarantine, converting timestamps for clean data
+        return self.split_clean_quarantine(df, timestamp_fields=["timestamp"])
+
