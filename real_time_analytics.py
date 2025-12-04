@@ -192,11 +192,143 @@ class RealTimeAnalytics:
 
         return hourly_sales
 
-   
+
+    # AGGREGATION BY CATEGORY
+    def aggregate_sales_by_category(self, df: DataFrame, product_df: DataFrame = None) -> DataFrame:
+        """
+        Aggregate comprehensive sales metrics by product category
+        """
+        # Explode products array to get individual products
+        exploded_df = df.select(
+            "transaction_id",
+            "user_id",
+            "timestamp",
+            explode("products").alias("product")
+        )
+
+        # Extract product details and calculate revenue
+        product_level_df = exploded_df.select(
+            "transaction_id",
+            "user_id",
+            "timestamp",
+            col("product.product_id").alias("product_id"),
+            col("product.quantity").alias("quantity"),
+            col("product.price").alias("price")
+        ).withColumn(
+            "product_revenue",
+            col("quantity") * col("price")
+        )
+
+        # Aggregate by product_id
+        product_metrics = product_level_df.groupBy("product_id") \
+            .agg(
+                # Revenue metrics
+                spark_sum("product_revenue").alias("total_revenue"),
+                spark_sum("quantity").alias("total_units_sold"),
+                count("transaction_id").alias("transaction_count"),
+
+                # Statistical metrics
+                avg("product_revenue").alias("avg_revenue_per_transaction"),
+                avg("quantity").alias("avg_quantity_per_transaction"),
+                avg("price").alias("avg_price"),
+
+                # Customer metrics
+                countDistinct("user_id").alias("unique_customers")
+            )
+
+        # If product catalog is provided, join to get category and aggregate
+        if product_df is not None:
+            # Join with product catalog to get category
+            category_df = product_metrics.join(
+                product_df.select("product_id", "category"),
+                on="product_id",
+                how="left"
+            )
+
+            # Aggregate by category
+            category_metrics = category_df.groupBy("category") \
+                .agg(
+                    spark_sum("total_revenue").alias("total_revenue"),
+                    spark_sum("total_units_sold").alias("total_units_sold"),
+                    spark_sum("transaction_count").alias("transaction_count"),
+                    countDistinct("product_id").alias("unique_products"),
+                    avg("avg_price").alias("avg_product_price"),
+                    countDistinct("unique_customers").alias("total_unique_customers")
+                )
+
+            return category_metrics
+
+        return product_metrics
+
+    def aggregate_sales_by_country(self, df: DataFrame, user_df: DataFrame = None) -> DataFrame:
+        """
+        Aggregate comprehensive sales metrics by country (region)
+        """
+        
+        # If user DataFrame is provided, join to get country
+        if user_df is not None:
+            # Join transactions with users to get country
+            trans_with_country = df.join(
+                user_df.select("user_id", "country"),
+                on="user_id",
+                how="left"
+            )
+
+            # Aggregate by country
+            country_metrics = trans_with_country.groupBy("country") \
+                .agg(
+                    # Revenue metrics
+                    spark_sum("total_amount").alias("total_sales"),
+                    count("transaction_id").alias("transaction_count"),
+                    avg("total_amount").alias("avg_transaction_value"),
+
+                    # Statistical metrics
+                    spark_min("total_amount").alias("min_transaction_value"),
+                    spark_max("total_amount").alias("max_transaction_value"),
+                    stddev("total_amount").alias("stddev_transaction_value"),
+
+                    # Customer metrics
+                    countDistinct("user_id").alias("unique_customers"),
+                    (count("transaction_id") / countDistinct("user_id")).alias("avg_transactions_per_customer")
+                )
+
+            # Add geographic distribution percentage
+            total_sales = country_metrics.agg(spark_sum("total_sales").alias("total")).collect()[0]["total"]
+            if total_sales:
+                country_metrics = country_metrics.withColumn(
+                    "sales_percentage",
+                    (col("total_sales") / lit(total_sales)) * 100
+                )
+
+            return country_metrics
+
+        return df
+
+    def process_cart_abandonment_alerts(self, abandoned_carts_df: DataFrame):
+        """
+        Generate alerts for abandoned high-value carts
+        """
+        if abandoned_carts_df.count() > 0:
+            abandoned_list = abandoned_carts_df.collect()
+
+            for cart in abandoned_list:
+                message = f"High-value cart abandoned: {cart['cart_id']} (${cart['cart_value']:.2f})"
+                data = {
+                    "cart_id": cart['cart_id'],
+                    "user_id": cart['user_id'],
+                    "cart_value": float(cart['cart_value']),
+                    "cart_timestamp": str(cart['timestamp'])
+                }
+
+                self.generate_alert(
+                    alert_type="cart_abandonment",
+                    severity="medium",
+                    message=message,
+                    data=data
+                )
 
 
-# ==================== CONVENIENCE FUNCTIONS ====================
-
+# Abstracted Functions for easier integration
 def detect_transaction_anomalies(df: DataFrame) -> DataFrame:
     """Detect amount-based transaction anomalies"""
     analyzer = RealTimeAnalytics()
@@ -216,5 +348,3 @@ def generate_inventory_alerts(df: DataFrame):
     """Generate alerts for low inventory"""
     analyzer = RealTimeAnalytics()
     analyzer.process_inventory_alerts(df)
-
-
