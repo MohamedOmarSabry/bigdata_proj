@@ -31,6 +31,13 @@ class DataQualityValidator:
 
     # Helper functions
 
+    def deduplicate_batch(self, df: DataFrame, primary_key: str) -> DataFrame:
+        """
+        Remove duplicate records within a batch based on primary key
+        Keeps the first occurrence of each primary key TODO: Could do it by latest timestamp if available
+        """
+        return df.dropDuplicates([primary_key])
+
     def add_quality_metadata(self, df: DataFrame) -> DataFrame:
         """Add data quality metadata columns to track validation status"""
         return df \
@@ -119,6 +126,9 @@ class DataQualityValidator:
         """
         Validate and clean user data
         """
+        # Deduplicate within batch by primary key
+        df = self.deduplicate_batch(df, "user_id")
+
         # Add quality metadata via helper func
         df = self.add_quality_metadata(df)
 
@@ -181,6 +191,9 @@ class DataQualityValidator:
         """
         Validate and clean product catalog data
         """
+        # Deduplicate within batch by primary key
+        df = self.deduplicate_batch(df, "product_id")
+
         # Add quality metadata via helper func
         df = self.add_quality_metadata(df)
 
@@ -237,6 +250,9 @@ class DataQualityValidator:
         """
         Validate and clean product view event data
         """
+        # Deduplicate within batch by primary key
+        df = self.deduplicate_batch(df, "event_id")
+
         # Add quality metadata via helper func
         df = self.add_quality_metadata(df)
 
@@ -271,6 +287,9 @@ class DataQualityValidator:
         """
         Validate and clean cart event data
         """
+        # Deduplicate within batch by primary key
+        df = self.deduplicate_batch(df, "cart_id")
+
         # Add quality metadata via helper func
         df = self.add_quality_metadata(df)
 
@@ -318,6 +337,9 @@ class DataQualityValidator:
         """
         Validate and clean transaction event data
         """
+        # Deduplicate within batch by primary key
+        df = self.deduplicate_batch(df, "transaction_id")
+
         # Add quality metadata via helper func
         df = self.add_quality_metadata(df)
 
@@ -370,6 +392,13 @@ class DataQualityValidator:
             df,
             (size(col("products")) == 0) | col("products").isNull(),
             "invalid_transaction: products array is empty"
+        )
+
+        # Ensure there are no duplicate product IDs in the products array - check if num of unique IDs matches size of array
+        df = self.mark_error(
+            df,
+            col("products").isNotNull() & (size(col("products")) != size(array_distinct(col("products")))),
+            "invalid_transaction: duplicate product IDs in products array"
         )
 
         # Split into clean and quarantine, converting timestamps for clean data
