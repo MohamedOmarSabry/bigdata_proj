@@ -16,7 +16,7 @@ import json
 import shutil, os
 from pyspark.sql.functions import explode
 
-from config import PATHS
+from config import KAFKA_CONFIG, PATHS, SPARK_CONFIG
 from data_quality import (
     validate_users,
     validate_products,
@@ -77,9 +77,9 @@ def define_transaction_schema():
 def create_spark_session():
     """Create Spark session"""
     return SparkSession.builder \
-        .appName("Global Mart Stream Processing") \
-        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0") \
-        .config("spark.sql.streaming.checkpointLocation", "file:///tmp/global-mart-stream") \
+        .appName(SPARK_CONFIG['app_name']) \
+        .config("spark.jars.packages", SPARK_CONFIG['packages']) \
+        .config("spark.sql.shuffle.partitions", SPARK_CONFIG['shuffle_partitions']) \
         .getOrCreate()
 
 # Processing Functions - read from Kafka, validate using functions from data_quality, then write to disk in designated folders
@@ -172,16 +172,20 @@ def start_streaming_pl():
     
     spark = create_spark_session()
     spark.sparkContext.setLogLevel("ERROR")
+
+    # User Stream
     kafka_user_df = (
     spark.readStream
          .format("kafka")
-         .option("kafka.bootstrap.servers", "localhost:9092")
-         .option("subscribe", "globalmart.users")
+         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
+         .option("subscribe", KAFKA_CONFIG['topics']['users'])
          .option("kafka.group.id", "globalmart-user-streamer")
          .option("startingOffsets", "latest")
          .load()
     )
+        
     user_schema = define_user_schema()
+
     # Parse JSON
     parsed_user_df = kafka_user_df \
         .selectExpr("CAST(value AS STRING) as json") \
@@ -192,21 +196,23 @@ def start_streaming_pl():
     user_writer = (parsed_user_df
         .writeStream
         .outputMode("append")
-        .format("parquet")
-        .option("path", "file:///home/m/Desktop/bigdata_proj/Staging/users/")
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/users/")
+        .foreachBatch(process_user_batch) # validates and writes to disk
+        .option("checkpointLocation", PATHS['checkpoints_users'])
         .start()
         )
+    
+    # Product Stream
     
     kafka_product_df = (
     spark.readStream
          .format("kafka")
-         .option("kafka.bootstrap.servers", "localhost:9092")
-         .option("subscribe", "globalmart.product_catalog")
+         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
+         .option("subscribe", KAFKA_CONFIG['topics']['products'])
          .option("kafka.group.id", "globalmart-product-streamer")
          .option("startingOffsets", "latest")
          .load()
     )
+
     product_schema = define_product_schema()
     # Parse JSON
     parsed_product_df = kafka_product_df \
@@ -218,17 +224,17 @@ def start_streaming_pl():
     product_writer = (parsed_product_df
         .writeStream
         .outputMode("append")
-        .format("parquet")
-        .option("path", "file:///home/m/Desktop/bigdata_proj/Staging/products/")
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/products/")
+        .foreachBatch(process_product_batch) # validates and writes to disk
+        .option("checkpointLocation", PATHS['checkpoints_products'])
         .start()
         )
     
+    # Product View Stream
     kafka_view_df = (
     spark.readStream
          .format("kafka")
-         .option("kafka.bootstrap.servers", "localhost:9092")
-         .option("subscribe", "globalmart.product_views")
+         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
+         .option("subscribe", KAFKA_CONFIG['topics']['views'])
          .option("kafka.group.id", "globalmart-product-view-streamer")
          .option("startingOffsets", "latest")
          .load()
@@ -244,22 +250,23 @@ def start_streaming_pl():
     views_writer = (parsed_view_df
         .writeStream
         .outputMode("append")
-        .format("parquet")
-        .option("path", "file:///home/m/Desktop/bigdata_proj/Staging/views/")
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/views/")
+        .foreachBatch(process_view_batch) # validates and writes to disk
+        .option("checkpointLocation", PATHS['checkpoints_views'])
         .start()
         )
     
+    # Cart Stream
     kafka_cart_df = (
     spark.readStream
          .format("kafka")
-         .option("kafka.bootstrap.servers", "localhost:9092")
-         .option("subscribe", "globalmart.cart_events")
+         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
+         .option("subscribe", KAFKA_CONFIG['topics']['carts'])
          .option("kafka.group.id", "globalmart-cart-streamer")
          .option("startingOffsets", "latest")
          .load()
     )
-    #FOR THE CART, YOU NEED TO HANDLE HAVING THE SAME PRODUCT MULTIPLE TIMES!!!!!!!!!!!!!!
+
+
     cart_schema = define_cart_schema()
     # Parse JSON
     parsed_cart_df = kafka_cart_df \
@@ -272,16 +279,17 @@ def start_streaming_pl():
         .writeStream
         .outputMode("append")
         .format("parquet")
-        .option("path", "file:///home/m/Desktop/bigdata_proj/Staging/carts/")
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/carts/")
+        .foreachBatch(process_cart_batch) # validates and writes to disk
+        .option("checkpointLocation", PATHS['checkpoint_carts'])
         .start()
         )
     
+    # Transaction Stream
     kafka_transaction_df = (
     spark.readStream
          .format("kafka")
-         .option("kafka.bootstrap.servers", "localhost:9092")
-         .option("subscribe", "globalmart.transaction_events")
+         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
+         .option("subscribe", KAFKA_CONFIG['topics']['transactions'])
          .option("kafka.group.id", "globalmart-transaction-streamer")
          .option("startingOffsets", "latest")
          .load()
@@ -298,8 +306,8 @@ def start_streaming_pl():
         .writeStream
         .outputMode("append")
         .format("parquet")
-        .option("path", "file:///home/m/Desktop/bigdata_proj/Staging/transactions/")
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/transactions/")
+        .foreachBatch(process_transaction_batch) # validates and writes to disk
+        .option("checkpointLocation", PATHS['checkpoint_transactions'])
         .start()
         )
     
