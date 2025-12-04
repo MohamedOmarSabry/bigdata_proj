@@ -156,54 +156,6 @@ class GlobalMartProducer:
             "payment_method": random.choice(["credit_card", "paypal", "gift_card"]),
         }
         return self.failure_injector(record)
-    def check_field(self,data,field):
-        """Check if field is present and not None"""
-        return field in data and data[field] is not None
-    def validate_generated_data(self,data,type=""):
-        """Validate generated data for required fields"""
-        if type == "user":
-            required_fields = ["user_id", "email", "age", "country", "registration_date", "preferences"]
-            if not all(self.check_field(data, field) for field in required_fields):
-                return False
-            if not isinstance(data["email"], str):
-                return False
-            elif "@" not in data["email"] or "." not in data["email"]:
-                return False
-            if not (isinstance(data["age"],(int, float))):
-                return False
-            elif data["age"] not in range(18,81):
-                return False
-            if not isinstance(data["country"], str):
-                return False
-            elif data["country"] not in self.country_list:
-                return False
-            if not isinstance(data["registration_date"], str):
-                return False
-            try:
-                datetime.fromisoformat(data["registration_date"])
-            except ValueError:
-                return False
-        elif type == "product_view":
-            required_fields = ["event_id", "product_id", "user_id", "timestamp"]
-            if not all(self.check_field(data, field) for field in required_fields):
-                return False
-        elif type == "cart_event":
-            required_fields = ["cart_id", "user_id", "timestamp", "products"]
-            if not all(self.check_field(data, field) for field in required_fields):
-                return False
-        elif type == "transaction_event":
-            required_fields = ["transaction_id", "user_id", "timestamp", "products", "total_amount", "payment_method"]
-            if not all(self.check_field(data, field) for field in required_fields):
-                return False
-            if not isinstance(data["total_amount"], (int, float)):
-                return False
-            elif data["total_amount"] < 0:
-                return False
-        else:
-            return False
-
-        return True
-
 
     #Idea generate user --> generate products --> generate product view --> generate cart event --> generate transaction event
     def produce_data_stream(self, interval=1):
@@ -217,7 +169,6 @@ class GlobalMartProducer:
                     f"{user_data['email']} - {user_data['age']} - "
                     f"{user_data['registration_date']} - {user_data['preferences']}"
                 )
-                #user_data["faulty"]=self.validate_generated_data(user_data,type="user")
                 self.producer.send(
                     topic='globalmart.users',
                     key=user_data['user_id'],
@@ -241,7 +192,6 @@ class GlobalMartProducer:
                     f"{product_payload['price']} - {product_payload['inventory']} - "
                     f"{product_payload['category']}"
                     )
-                    #if self.validate_generated_data(product_view_event,type="product_view"):
                     self.producer.send(
                         topic='globalmart.product_views',
                         key=product_view_event['event_id'],
@@ -263,7 +213,6 @@ class GlobalMartProducer:
                         f"{cart_event['user_id']} - {cart_event['products']} - "
                         f"{cart_event['timestamp']}"
                         )
-                        #if self.validate_generated_data(cart_event,type="cart_event"):
                         self.producer.send(
                             topic='globalmart.cart_events',
                             key=cart_event['cart_id'],
@@ -284,7 +233,6 @@ class GlobalMartProducer:
                             f"{transaction_event['total_amount']} - {transaction_event['payment_method']} - "
                             f"{transaction_event['timestamp']}"
                             )
-                            #if self.validate_generated_data(transaction_event,type="transaction_event"):
                             self.producer.send(
                                 topic='globalmart.transaction_events',
                                 key=transaction_event['transaction_id'],

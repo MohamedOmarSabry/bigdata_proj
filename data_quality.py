@@ -7,7 +7,7 @@ from pyspark.sql.functions import (
     col, when, lit, trim, regexp_replace,
     current_timestamp, concat_ws, coalesce,
     length, lower, upper, to_timestamp,
-    array_contains, size
+    array_contains, size, array_distinct
 )
 from pyspark.sql.types import IntegerType, DoubleType, StringType, TimestampType
 from config import DATA_QUALITY
@@ -300,6 +300,13 @@ class DataQualityValidator:
             df,
             (size(col("products")) == 0) | col("products").isNull(),
             "invalid_cart: products array is empty"
+        )
+
+        # ensure there are no duplicate product IDs in the products array - check if num of unique IDs matches size of array
+        df = self.mark_error(
+            df,
+            col("products").isNotNull() & (size(col("products")) != size(array_distinct(col("products")))),
+            "invalid_cart: duplicate product IDs in products array"
         )
 
         # Split into clean and quarantine, converting timestamps for clean data
