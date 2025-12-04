@@ -127,7 +127,7 @@ class DataQualityValidator:
         df = self.apply_fixable_corrections(df, "country", "string")
         df = self.apply_fixable_corrections(df, "registration_date", "timestamp")
 
-        # Check required fields to see if there are missing fields (in that case it should be flagged as error)
+        # check required fields to see if there are missing fields (in that case it should be flagged as error)
         required_fields = self.config['required_fields']['user']
         for field in required_fields:
             df = self.mark_error(
@@ -173,3 +173,58 @@ class DataQualityValidator:
 
         # We will then split the clean data and the data that needs to be quarantined due to validation errors
         return self.split_clean_quarantine(df, timestamp_fields=["registration_date"])
+    
+    # PRODUCT DATA VALIDATION
+
+    def clean_product_data(self, df: DataFrame):
+        """
+        Validate and clean product catalog data
+        """
+        # Add quality metadata via helper func
+        df = self.add_quality_metadata(df)
+
+        # apply corrections that were defined using the helper function
+        df = self.apply_fixable_corrections(df, "product_id", "string")
+        df = self.apply_fixable_corrections(df, "price", "double")
+        df = self.apply_fixable_corrections(df, "inventory", "integer")
+        df = self.apply_fixable_corrections(df, "category", "string")
+
+        # check required fields to see if there are missing fields (in that case it should be flagged as error)
+        required_fields = self.config['required_fields']['product']
+        for field in required_fields:
+            df = self.mark_error(
+                df,
+                col(field).isNull(),
+                f"missing_required_field: {field}"
+            )
+
+        # Validate price range
+        df = self.mark_error(
+            df,
+            (col("price") < self.price_range[0]) | (col("price") > self.price_range[1]),
+            f"invalid_price: must be between {self.price_range[0]} and {self.price_range[1]}"
+        )
+
+        # check for negative price
+        df = self.mark_error(
+            df,
+            col("price") < 0,
+            "negative_value: price cannot be negative"
+        )
+
+        # Validate inventory range
+        df = self.mark_error(
+            df,
+            (col("inventory") < self.inventory_range[0]) | (col("inventory") > self.inventory_range[1]),
+            f"invalid_inventory: must be between {self.inventory_range[0]} and {self.inventory_range[1]}"
+        )
+
+        # check for negative inventory
+        df = self.mark_error(
+            df,
+            col("inventory") < 0,
+            "negative_value: inventory cannot be negative"
+        )
+
+        # Split into clean and quarantine
+        return self.split_clean_quarantine(df)
