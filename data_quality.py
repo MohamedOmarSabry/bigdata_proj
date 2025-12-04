@@ -87,7 +87,7 @@ class DataQualityValidator:
         # Replace "<corrupted>" with NULL
         df = df.withColumn(
             field_name,
-            when(col(field_name) == "<corrupted>", None)
+            when(col(field_name).cast(StringType()) == "<corrupted>", None)
             .otherwise(col(field_name))
         )
 

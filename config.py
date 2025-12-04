@@ -10,45 +10,42 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # PATH CONFIGURATIONS FOR ENTIRE PIPELINE
 PATHS = {
 
-    # TODO: Check with what we willl do for data warehouse and so on 
     # Main data directories
-    'base_dir': os.path.join(BASE_DIR, 'data'),
-    'clean_data': os.path.join(BASE_DIR, 'data', 'clean'),
-    'quarantine': os.path.join(BASE_DIR, 'data', 'quarantine'),
-    'metrics': os.path.join(BASE_DIR, 'data', 'metrics'),
-    'checkpoints': os.path.join(BASE_DIR, 'data', 'checkpoints'),
-
+    'base_dir': os.path.join(BASE_DIR, 'Staging'),
+    'clean_data': os.path.join(BASE_DIR, 'Staging', 'clean'),
+    'quarantine': os.path.join(BASE_DIR, 'Staging', 'quarantine'),
+    # 'metrics': os.path.join(BASE_DIR, 'Staging', 'metrics'),
+    'checkpoints': os.path.join(BASE_DIR, 'Staging', 'checkpoints'),
     # Clean data subdirectories - will store validated/cleaned records
-    'clean_users': os.path.join(BASE_DIR, 'data', 'clean', 'users'),
-    'clean_products': os.path.join(BASE_DIR, 'data', 'clean', 'products'),
-    'clean_views': os.path.join(BASE_DIR, 'data', 'clean', 'views'),
-    'clean_carts': os.path.join(BASE_DIR, 'data', 'clean', 'carts'),
-    'clean_transactions': os.path.join(BASE_DIR, 'data', 'clean', 'transactions'),
+    'clean_users': os.path.join(BASE_DIR, 'Staging', 'clean', 'users'),
+    'clean_products': os.path.join(BASE_DIR, 'Staging', 'clean', 'products'),
+    'clean_views': os.path.join(BASE_DIR, 'Staging', 'clean', 'views'),
+    'clean_carts': os.path.join(BASE_DIR, 'Staging', 'clean', 'carts'),
+    'clean_transactions': os.path.join(BASE_DIR, 'Staging', 'clean', 'transactions'),
 
     # Quarantine subdirectories - for rejected/error records
-    'quarantine_users': os.path.join(BASE_DIR, 'data', 'quarantine', 'users'),
-    'quarantine_products': os.path.join(BASE_DIR, 'data', 'quarantine', 'products'),
-    'quarantine_views': os.path.join(BASE_DIR, 'data', 'quarantine', 'views'),
-    'quarantine_carts': os.path.join(BASE_DIR, 'data', 'quarantine', 'carts'),
-    'quarantine_transactions': os.path.join(BASE_DIR, 'data', 'quarantine', 'transactions'),
+    'quarantine_users': os.path.join(BASE_DIR, 'Staging', 'quarantine', 'users'),
+    'quarantine_products': os.path.join(BASE_DIR, 'Staging', 'quarantine', 'products'),
+    'quarantine_views': os.path.join(BASE_DIR, 'Staging', 'quarantine', 'views'),
+    'quarantine_carts': os.path.join(BASE_DIR, 'Staging', 'quarantine', 'carts'),
+    'quarantine_transactions': os.path.join(BASE_DIR, 'Staging', 'quarantine', 'transactions'),
 
     # Checkpoint subdirectories - for streaming checkpoints
-    'checkpoint_users': os.path.join(BASE_DIR, 'data', 'checkpoints', 'users'),
-    'checkpoint_products': os.path.join(BASE_DIR, 'data', 'checkpoints', 'products'),
-    'checkpoint_views': os.path.join(BASE_DIR, 'data', 'checkpoints', 'views'),
-    'checkpoint_carts': os.path.join(BASE_DIR, 'data', 'checkpoints', 'carts'),
-    'checkpoint_transactions': os.path.join(BASE_DIR, 'data', 'checkpoints', 'transactions'),
-    'checkpoint_alerts': os.path.join(BASE_DIR, 'data', 'checkpoints', 'alerts'),
-    'checkpoint_metrics': os.path.join(BASE_DIR, 'data', 'checkpoints', 'metrics'),
-
-    # Metrics output directories - for storing computed metrics
-    'metrics_sales': os.path.join(BASE_DIR, 'data', 'metrics', 'sales'),
-    'metrics_inventory': os.path.join(BASE_DIR, 'data', 'metrics', 'inventory'),
-    'metrics_anomalies': os.path.join(BASE_DIR, 'data', 'metrics', 'anomalies'),
-    'metrics_cart_abandonment': os.path.join(BASE_DIR, 'data', 'metrics', 'cart_abandonment'),
+    'checkpoint_users': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'users'),
+    'checkpoint_products': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'products'),
+    'checkpoint_views': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'views'),
+    'checkpoint_carts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'carts'),
+    'checkpoint_transactions': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'transactions'),
+    'checkpoint_alerts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'alerts'),
+    'checkpoint_metrics': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'metrics'),
+    # # Metrics output directories - for storing computed metrics
+    # 'metrics_sales': os.path.join(BASE_DIR, 'Staging', 'metrics', 'sales'),
+    # 'metrics_inventory': os.path.join(BASE_DIR, 'Staging', 'metrics', 'inventory'),
+    # 'metrics_anomalies': os.path.join(BASE_DIR, 'Staging', 'metrics', 'anomalies'),
+    # 'metrics_cart_abandonment': os.path.join(BASE_DIR, 'Staging', 'metrics', 'cart_abandonment'),
 
     # Alert logs
-    'alerts_log': os.path.join(BASE_DIR, 'data', 'alerts.log'),
+    'alerts_log': os.path.join(BASE_DIR, 'Staging', 'alerts.log'),
 }
 
 # KAFKA CONFIGURATION
@@ -61,7 +58,6 @@ KAFKA_CONFIG = {
         'carts': 'globalmart.cart_events',
         'transactions': 'globalmart.transaction_events',
     },
-    'consumer_group_prefix': 'globalmart-stream-processor',
 }
 
 # Setting Anomaly Detection Thresholds and Rules
@@ -138,7 +134,7 @@ DATA_QUALITY = {
 # Spark Configuration
 SPARK_CONFIG = {
     'app_name': 'Global Mart Stream Processing',
-    'packages': 'org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0',
+    'packages': 'org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1',
     'log_level': 'ERROR',
 
     # Streaming configurations
