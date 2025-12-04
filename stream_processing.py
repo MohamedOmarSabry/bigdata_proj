@@ -1,3 +1,10 @@
+import os
+import sys
+
+# Set SPARK_HOME to use PySpark from virtual environment
+pyspark_path = os.path.join(sys.prefix, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages', 'pyspark')
+os.environ['SPARK_HOME'] = pyspark_path
+
 from pyspark.sql.functions import col, current_timestamp, unix_timestamp
 
 from pyspark.sql import SparkSession
@@ -197,7 +204,7 @@ def start_streaming_pl():
         .writeStream
         .outputMode("append")
         .foreachBatch(process_user_batch) # validates and writes to disk
-        .option("checkpointLocation", PATHS['checkpoints_users'])
+        .option("checkpointLocation", PATHS['checkpoint_users'])
         .start()
         )
     
@@ -225,7 +232,7 @@ def start_streaming_pl():
         .writeStream
         .outputMode("append")
         .foreachBatch(process_product_batch) # validates and writes to disk
-        .option("checkpointLocation", PATHS['checkpoints_products'])
+        .option("checkpointLocation", PATHS['checkpoint_products'])
         .start()
         )
     
@@ -251,7 +258,7 @@ def start_streaming_pl():
         .writeStream
         .outputMode("append")
         .foreachBatch(process_view_batch) # validates and writes to disk
-        .option("checkpointLocation", PATHS['checkpoints_views'])
+        .option("checkpointLocation", PATHS['checkpoint_views'])
         .start()
         )
     
@@ -321,20 +328,19 @@ def start_streaming_pl():
 
 if __name__ == "__main__":
     try:
-        CHECKPOINT_DIR = "/tmp/global-mart-stream"
+        # Clean old checkpoints if they exist
+        CHECKPOINT_DIR = PATHS['checkpoints']
         if os.path.exists(CHECKPOINT_DIR):
-            print(f"🧹 Removing old checkpoint dir: {CHECKPOINT_DIR}")
+            print(f"Removing old checkpoint dir: {CHECKPOINT_DIR}")
             shutil.rmtree(CHECKPOINT_DIR)
-        # Start Spark streaming in background thread
-        # spark_thread = Thread(target=store_data_disk)
-        # spark_thread.start()
-        store_data_disk()
-        # Give Spark time to start
-        #time.sleep(5)
-        
+
+        # Start the streaming pipeline
+        start_streaming_pl()
+
     except KeyboardInterrupt:
-        print("\n\nShutting down dashboard...")
+        print("\n\n⚠ Shutting down stream processing...")
     except Exception as e:
         print(f"\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
+

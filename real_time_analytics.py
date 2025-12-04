@@ -77,8 +77,8 @@ class RealTimeAnalytics:
         df = df.withColumn("alert_timestamp", current_timestamp())
 
         return df
-
-    # ALERT GENERATION
+    
+        # ALERT GENERATION
 
     def generate_alert(self, alert_type: str, severity: str, message: str, data: dict = None):
         """
@@ -181,3 +181,5 @@ def generate_transaction_alerts(df: DataFrame):
 def generate_inventory_alerts(df: DataFrame):
     analyzer = RealTimeAnalytics()
     analyzer.process_inventory_alerts(df)
+
+
