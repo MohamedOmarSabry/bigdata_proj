@@ -265,3 +265,128 @@ class DataQualityValidator:
         # Split into clean and quarantine, converting timestamps for clean data
         return self.split_clean_quarantine(df, timestamp_fields=["timestamp"])
 
+    # CART DATA VALIDATION
+
+    def clean_cart_data(self, df: DataFrame):
+        """
+        Validate and clean cart event data
+        """
+        # Add quality metadata via helper func
+        df = self.add_quality_metadata(df)
+
+        # apply corrections that were defined using the helper function
+        df = self.apply_fixable_corrections(df, "cart_id", "string")
+        df = self.apply_fixable_corrections(df, "user_id", "string")
+        df = self.apply_fixable_corrections(df, "timestamp", "timestamp")
+
+        # check required fields
+        required_fields = self.config['required_fields']['cart']
+        for field in required_fields:
+            df = self.mark_error(
+                df,
+                col(field).isNull(),
+                f"missing_required_field: {field}"
+            )
+
+        # Validate timestamp format
+        df = self.mark_error(
+            df,
+            to_timestamp(col("timestamp")).isNull() & col("timestamp").isNotNull(),
+            "invalid_date_format: timestamp"
+        )
+
+        # Validate products array is not empty
+        df = self.mark_error(
+            df,
+            (size(col("products")) == 0) | col("products").isNull(),
+            "invalid_cart: products array is empty"
+        )
+
+        # Split into clean and quarantine, converting timestamps for clean data
+        return self.split_clean_quarantine(df, timestamp_fields=["timestamp"])
+    
+        # TRANSACTION DATA VALIDATION
+
+    def clean_transaction_data(self, df: DataFrame):
+        """
+        Validate and clean transaction event data
+        """
+        # Add quality metadata via helper func
+        df = self.add_quality_metadata(df)
+
+        # apply corrections that were defined using the helper function
+        df = self.apply_fixable_corrections(df, "transaction_id", "string")
+        df = self.apply_fixable_corrections(df, "user_id", "string")
+        df = self.apply_fixable_corrections(df, "timestamp", "timestamp")
+        df = self.apply_fixable_corrections(df, "total_amount", "double")
+        df = self.apply_fixable_corrections(df, "payment_method", "string")
+
+        # check required fields
+        required_fields = self.config['required_fields']['transaction']
+        for field in required_fields:
+            df = self.mark_error(
+                df,
+                col(field).isNull(),
+                f"missing_required_field: {field}"
+            )
+
+        # Validate timestamp format
+        df = self.mark_error(
+            df,
+            to_timestamp(col("timestamp")).isNull() & col("timestamp").isNotNull(),
+            "invalid_date_format: timestamp"
+        )
+
+        # Validate total_amount range
+        df = self.mark_error(
+            df,
+            (col("total_amount") < self.amount_range[0]) | (col("total_amount") > self.amount_range[1]),
+            f"invalid_total_amount: must be between {self.amount_range[0]} and {self.amount_range[1]}"
+        )
+
+        # Check for negative total_amount
+        df = self.mark_error(
+            df,
+            col("total_amount") < 0,
+            "negative_value: total_amount cannot be negative"
+        )
+
+        # Validate payment method
+        df = self.mark_error(
+            df,
+            ~col("payment_method").isin(self.valid_payment_methods),
+            f"invalid_payment_method: must be one of {self.valid_payment_methods}"
+        )
+
+        # Validate products array is not empty
+        df = self.mark_error(
+            df,
+            (size(col("products")) == 0) | col("products").isNull(),
+            "invalid_transaction: products array is empty"
+        )
+
+        # Split into clean and quarantine, converting timestamps for clean data
+        return self.split_clean_quarantine(df, timestamp_fields=["timestamp"])
+
+
+# Abstracted functions for readability and ease of use
+
+def validate_users(df: DataFrame):
+    validator = DataQualityValidator()
+    return validator.clean_user_data(df)
+
+def validate_products(df: DataFrame):
+    validator = DataQualityValidator()
+    return validator.clean_product_data(df)
+
+def validate_views(df: DataFrame):
+    validator = DataQualityValidator()
+    return validator.clean_view_data(df)
+
+def validate_carts(df: DataFrame):
+    validator = DataQualityValidator()
+    return validator.clean_cart_data(df)
+
+def validate_transactions(df: DataFrame):
+    validator = DataQualityValidator()
+    return validator.clean_transaction_data(df)
