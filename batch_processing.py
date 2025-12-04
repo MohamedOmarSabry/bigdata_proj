@@ -17,6 +17,51 @@ import time
 import json
 import shutil, os
 from pyspark.sql.functions import explode
+def define_user_schema():
+    return StructType([
+        StructField("user_id", StringType(), True),
+        StructField("email", StringType(), True),
+        StructField("age", IntegerType(), True),
+        StructField("country", StringType(), True),
+        StructField("registration_date", StringType(), True),
+        StructField("preferences", ArrayType(StringType()), True)
+    ])
+def define_product_schema():
+    return StructType([
+        StructField("product_id", StringType(), True),
+        StructField("price", DoubleType(), True),
+        StructField("inventory", IntegerType(), True),
+        StructField("category", StringType(), True)
+    ])
+def define_cart_product_schema():
+    return StructType([
+        StructField("product_id", StringType(), True),
+        StructField("price", DoubleType(), True),
+        StructField("quantity", IntegerType(), True),
+    ])
+def define_view_schema():
+    return StructType([
+        StructField("event_id", StringType(), True),
+        StructField("product_id", StringType(), True),
+        StructField("user_id", StringType(), True),
+        StructField("timestamp", StringType(), True)
+    ])
+def define_cart_schema():
+    return StructType([
+        StructField("cart_id", StringType(), True),
+        StructField("user_id", StringType(), True),
+        StructField("timestamp", StringType(), True),
+        StructField("products", ArrayType(define_cart_product_schema()), True)
+    ])
+def define_transaction_schema():
+    return StructType([
+        StructField("transaction_id", StringType(), True),
+        StructField("user_id", StringType(), True),
+        StructField("total_amount", DoubleType(), True),
+        StructField("timestamp", StringType(), True),
+        StructField("payment_method", StringType(), True),
+        StructField("products", ArrayType(define_cart_product_schema()), True)
+    ])
 
 def create_spark_session():
     """Create Spark session"""
@@ -646,51 +691,137 @@ def batch_job(cur):
     for row in sales_trend_results:
         print(row)
     return product_perf_results, sales_trend_results, rfm_results
+
 def ETL_batch():
     print("\n" + "="*60)
     print("Starting ETL Batch Processing Job")
     print("="*60)
     spark = create_spark_session()
     spark.sparkContext.setLogLevel("ERROR")
-    # Read all parquet files written by your streaming job
-    users_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/users/")
-    views_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/views/")
-    transactions_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/transactions/")
-    carts_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/carts/")
-    products_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/products/")
-    # Now you can do normal batch ETL
-    users_df.printSchema()
-    users_df.show(1,truncate=False)
-    views_df.printSchema()
-    views_df.show(1,truncate=False)
-    transactions_df.printSchema()
-    transactions_df.show(1,truncate=False)
-    carts_df.printSchema()
-    carts_df.show(1,truncate=False)
-    products_df.printSchema()
-    products_df.show(1,truncate=False)
-    product_first_seen_df = views_df.groupBy("product_id") \
-    .agg(min(col("timestamp")).alias("valid_from"))
-    products_df = products_df.join(product_first_seen_df, on="product_id", how="left") \
-    .withColumn("valid_to", lit(None).cast("timestamp")) \
-    .withColumn("is_current", lit(True))
-    products_df = products_df \
-    .withColumn("valid_from", col("valid_from").cast("timestamp")) \
-    .withColumn("valid_to", col("valid_to").cast("timestamp"))
     conn=get_or_create_database()
     cur=conn.cursor()
     create_tables(cur)
     print_table_metadata(cur)
-
-    products_scd(cur, products_df)
-    update_product_inventory_from_transactions(cur, transactions_df)
-
-    users_insert(cur, users_df)
-    user_prefs_insert(cur, users_df)
-    user_pref_bridge_insert(cur, users_df)
-    fact_product_view_insert(cur, views_df)
-    fact_transaction_event_insert(cur, transactions_df)
-    fact_cart_event_insert(cur, carts_df)
+    def process_users_stream(users_df, batch_id):
+        print(f"[ETL] Processing Users batch {batch_id} with {users_df.count()} rows")
+        users_df.printSchema()
+        users_df.show(1,truncate=False)
+        users_insert(cur, users_df)
+        user_prefs_insert(cur, users_df)
+        user_pref_bridge_insert(cur, users_df)
+    def process_products_stream(products_df, batch_id):
+        print(f"[ETL] Processing Products batch {batch_id} with {products_df.count()} rows")
+        products_df.printSchema()
+        products_df.show(1,truncate=False)
+        views_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/views/")
+        transactions_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/transactions/")
+        product_first_seen_df = views_df.groupBy("product_id") \
+        .agg(min(col("timestamp")).alias("valid_from"))
+        products_df = products_df.join(product_first_seen_df, on="product_id", how="left") \
+        .withColumn("valid_to", lit(None).cast("timestamp")) \
+        .withColumn("is_current", lit(True))
+        products_df = products_df \
+        .withColumn("valid_from", col("valid_from").cast("timestamp")) \
+        .withColumn("valid_to", col("valid_to").cast("timestamp"))
+        products_scd(cur, products_df)
+        update_product_inventory_from_transactions(cur, transactions_df)
+    def process_views_stream(views_df, batch_id):
+        print(f"[ETL] Processing Views batch {batch_id} with {views_df.count()} rows")
+        views_df.printSchema()
+        views_df.show(1,truncate=False)
+        fact_product_view_insert(cur, views_df)
+    def process_transactions_stream(transactions_df, batch_id):
+        print(f"[ETL] Processing Transactions batch {batch_id} with {transactions_df.count()} rows")
+        transactions_df.printSchema()
+        transactions_df.show(1,truncate=False)
+        fact_transaction_event_insert(cur, transactions_df)
+    def process_carts_stream(carts_df, batch_id):
+        print(f"[ETL] Processing Carts batch {batch_id} with {carts_df.count()} rows")
+        carts_df.printSchema()
+        carts_df.show(1,truncate=False)
+        fact_cart_event_insert(cur, carts_df)
+    # Read all parquet files written by your streaming job
+    user_schema = define_user_schema()
+    users_stream = (
+        spark.readStream
+            .format("parquet")
+            .schema(user_schema)
+            .load("file:///home/m/Desktop/bigdata_proj/Staging/users/")
+    )
+    user_writer = (
+    users_stream
+        .writeStream
+        .foreachBatch(process_users_stream)
+        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/users_etl/")
+        .trigger(once=True)
+        .start()
+    )
+    user_writer.awaitTermination()
+    view_schema = define_view_schema()
+    views_stream = (
+        spark.readStream
+            .format("parquet")
+            .schema(view_schema)
+            .load("file:///home/m/Desktop/bigdata_proj/Staging/views/")
+    )
+    views_writer = ( 
+    views_stream
+        .writeStream
+        .foreachBatch(process_views_stream)
+        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/views_etl/")
+        .trigger(once=True)
+        .start()
+    )
+    views_writer.awaitTermination()
+    cart_schema = define_cart_schema()
+    carts_stream = (
+        spark.readStream
+            .format("parquet")
+            .schema(cart_schema)
+            .load("file:///home/m/Desktop/bigdata_proj/Staging/carts/")
+    )
+    carts_writer = ( 
+    carts_stream
+        .writeStream
+        .foreachBatch(process_carts_stream)
+        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/carts_etl/")
+        .trigger(once=True)
+        .start()
+    )
+    carts_writer.awaitTermination()
+    transaction_schema = define_transaction_schema()
+    transactions_stream = (
+        spark.readStream
+            .format("parquet")
+            .schema(transaction_schema)
+            .load("file:///home/m/Desktop/bigdata_proj/Staging/transactions/")
+    )
+    transactions_writer = ( 
+    transactions_stream
+        .writeStream
+        .foreachBatch(process_transactions_stream)
+        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/transactions_etl/")
+        .trigger(once=True)
+        .start()
+    )
+    transactions_writer.awaitTermination()
+    product_schema = define_product_schema()
+    products_stream = (
+        spark.readStream
+            .format("parquet")
+            .schema(product_schema)
+            .load("file:///home/m/Desktop/bigdata_proj/Staging/products/")
+    )
+    products_writer = (
+    products_stream
+        .writeStream
+        .foreachBatch(process_products_stream)
+        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/products_etl/")
+        .trigger(once=True)
+        .start()
+    )
+    products_writer.awaitTermination()
+    # Now you can do normal batch ETL
     conn.commit()
     print("\n" + "="*60)
     print("Final Table Row Counts")

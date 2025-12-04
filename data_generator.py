@@ -362,5 +362,5 @@ if __name__ == "__main__":
         'system_error_rate': 0.01,
     }
     producer = GlobalMartProducer(config=config)
-    producer.start_simulation(num_threads=5, run_seconds=60)
+    producer.start_simulation(num_threads=4, run_seconds=180)
     #producer.start_simulation(num_sensors=5)
