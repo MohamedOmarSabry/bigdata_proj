@@ -11,7 +11,7 @@ from pyspark.sql import SparkSession
 from datetime import datetime, timedelta
 from pyspark.sql.functions import (
     from_json, col, window, avg, count, current_timestamp,
-    expr, lit
+    expr, lit, to_json, struct
 )
 from pyspark.sql.types import (
     StructType, StructField, StringType,
@@ -23,13 +23,22 @@ import json
 import shutil, os
 from pyspark.sql.functions import explode
 
-from config import KAFKA_CONFIG, PATHS, SPARK_CONFIG
+from config import KAFKA_CONFIG, PATHS, SPARK_CONFIG, ANOMALY_DETECTION, ALERT_CONFIG
 from data_quality import (
     validate_users,
     validate_products,
     validate_views,
     validate_carts,
     validate_transactions
+)
+from real_time_analytics import (
+    detect_transaction_anomalies,
+    detect_low_inventory,
+    generate_transaction_alerts,
+    generate_inventory_alerts,
+    aggregate_sales_by_hour,
+    aggregate_sales_by_category,
+    aggregate_sales_by_country
 )
 
 # Schema Definitions
@@ -89,6 +98,21 @@ def create_spark_session():
         .config("spark.sql.shuffle.partitions", SPARK_CONFIG['shuffle_partitions']) \
         .getOrCreate()
 
+# Helper function to write metrics to Kafka
+def write_to_kafka(df, topic_name):
+    """
+    Write DataFrame to Kafka topic as JSON
+    """
+    # Select all columns and convert to JSON
+    json_df = df.select(to_json(struct(*[col(c) for c in df.columns])).alias("value"))
+
+    # Write to Kafka
+    json_df.write \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
+        .option("topic", topic_name) \
+        .save()
+
 # Processing Functions - read from Kafka, validate using functions from data_quality, then write to disk in designated folders
 
 def process_user_batch(batch_df, batch_id):
@@ -108,7 +132,7 @@ def process_user_batch(batch_df, batch_id):
         print(f"[Batch {batch_id}] Users: {clean_df.count()} clean records written")
 
 def process_product_batch(batch_df, batch_id):
-    """Process product data batch"""
+    """Process product data batch with inventory monitoring"""
     if batch_df.count() > 0:
         # Apply data quality validation
         clean_df, quarantine_df = validate_products(batch_df)
@@ -120,6 +144,20 @@ def process_product_batch(batch_df, batch_id):
         if quarantine_df.count() > 0:
             quarantine_df.write.mode("append").parquet(PATHS['quarantine_products'])
             print(f"[Batch {batch_id}] Products: {quarantine_df.count()} records quarantined")
+
+        # Detect low inventory on clean data
+        inventory_df = detect_low_inventory(clean_df)
+
+        # Generate alerts for low inventory
+        generate_inventory_alerts(inventory_df)
+
+        # Write inventory alerts to Kafka stream
+        write_to_kafka(inventory_df, KAFKA_CONFIG['topics']['metrics_inventory_alerts'])
+
+        # Count alerts for logging
+        alert_count = inventory_df.filter(col("needs_alert") == True).count()
+        if alert_count > 0:
+            print(f"[Batch {batch_id}] Products: {alert_count} inventory alerts generated and sent to Kafka")
 
         print(f"[Batch {batch_id}] Products: {clean_df.count()} clean records written")
 
@@ -156,7 +194,7 @@ def process_cart_batch(batch_df, batch_id):
         print(f"[Batch {batch_id}] Carts: {clean_df.count()} clean records written")
     
 def process_transaction_batch(batch_df, batch_id):
-    """Process transaction data batch"""
+    """Process transaction data batch with anomaly detection"""
     if batch_df.count() > 0:
         # Apply data quality validation
         clean_df, quarantine_df = validate_transactions(batch_df)
@@ -169,7 +207,86 @@ def process_transaction_batch(batch_df, batch_id):
             quarantine_df.write.mode("append").parquet(PATHS['quarantine_transactions'])
             print(f"[Batch {batch_id}] Transactions: {quarantine_df.count()} records quarantined")
 
+        # Detect transaction anomalies on clean data
+        anomaly_df = detect_transaction_anomalies(clean_df)
+
+        # Generate alerts for detected anomalies
+        generate_transaction_alerts(anomaly_df)
+
+        # Write anomaly data to Kafka stream
+        write_to_kafka(anomaly_df, KAFKA_CONFIG['topics']['metrics_anomalies'])
+
+        # Count anomalies for logging
+        anomaly_count = anomaly_df.filter(col("is_anomaly") == True).count()
+        if anomaly_count > 0:
+            print(f"[Batch {batch_id}] Transactions: {anomaly_count} anomalies detected and sent to Kafka")
+
         print(f"[Batch {batch_id}] Transactions: {clean_df.count()} clean records written")
+
+# Streaming Analytics Functions - process clean data and generates real-time metrics, writes to Kafka topics
+
+def process_sales_aggregation_batch(batch_df, batch_id):
+    """Process sales aggregation for each batch"""
+    if batch_df.count() > 0:
+        # Read clean product and user data for enrichment
+        try:
+            product_df = batch_df.sparkSession.read.parquet(PATHS['clean_products'])
+            user_df = batch_df.sparkSession.read.parquet(PATHS['clean_users'])
+        except:
+            product_df = None
+            user_df = None
+            print(f"[Batch {batch_id}] Sales Aggregation: No product/user data available yet")
+
+        # Aggregate by hour
+        hourly_metrics = aggregate_sales_by_hour(batch_df)
+        # Add processing timestamp for time-based windowing
+        hourly_metrics = hourly_metrics.withColumn("processed_at", current_timestamp())
+
+        # Write to Kafka stream
+        write_to_kafka(hourly_metrics, KAFKA_CONFIG['topics']['metrics_sales_hourly'])
+        print(f"[Batch {batch_id}] Sales Aggregation: Hourly metrics sent to Kafka")
+
+        # Aggregate by category (if product data available)
+        if product_df is not None:
+            category_metrics = aggregate_sales_by_category(batch_df, product_df)
+            # Add processing timestamp for time-based windowing
+            category_metrics = category_metrics.withColumn("processed_at", current_timestamp())
+
+            # Write to Kafka stream
+            write_to_kafka(category_metrics, KAFKA_CONFIG['topics']['metrics_sales_category'])
+            print(f"[Batch {batch_id}] Sales Aggregation: Category metrics sent to Kafka")
+
+        # Aggregate by country/region (if user data available)
+        if user_df is not None:
+            country_metrics = aggregate_sales_by_country(batch_df, user_df)
+            # Add processing timestamp for time-based windowing
+            country_metrics = country_metrics.withColumn("processed_at", current_timestamp())
+
+            # Write to Kafka stream
+            write_to_kafka(country_metrics, KAFKA_CONFIG['topics']['metrics_sales_country'])
+            print(f"[Batch {batch_id}] Sales Aggregation: Country metrics sent to Kafka")
+
+def process_cart_abandonment_batch(cart_batch_df, batch_id):
+    """Process cart abandonment detection - simplified batch approach"""
+    if cart_batch_df.count() > 0:
+        try:
+            from pyspark.sql.functions import explode, sum as spark_sum
+
+            # Calculate cart values
+            cart_with_value = cart_batch_df.withColumn("product", explode("products")) \
+                .withColumn("item_total", col("product.price") * col("product.quantity")) \
+                .groupBy("cart_id", "user_id", "timestamp") \
+                .agg(spark_sum("item_total").alias("cart_value"))
+
+            # Filter high-value carts (threshold from config)
+            high_value_carts = cart_with_value.filter(col("cart_value") >= ANOMALY_DETECTION['cart_abandonment']['high_value_threshold'])
+
+            if high_value_carts.count() > 0:
+                # Write to Kafka stream
+                write_to_kafka(high_value_carts, KAFKA_CONFIG['topics']['metrics_abandoned_carts'])
+                print(f"[Batch {batch_id}] Cart Tracking: {high_value_carts.count()} high-value carts sent to Kafka")
+        except Exception as e:
+            print(f"[Batch {batch_id}] Cart Tracking: Error - {e}")
 
 # Main Streaming Pipeline
 def start_streaming_pl():
@@ -180,6 +297,7 @@ def start_streaming_pl():
     spark = create_spark_session()
     spark.sparkContext.setLogLevel("ERROR")
 
+    # =========== Read Streams for Batch Processing ===========
     # User Stream
     kafka_user_df = (
     spark.readStream
@@ -317,14 +435,42 @@ def start_streaming_pl():
         .option("checkpointLocation", PATHS['checkpoint_transactions'])
         .start()
         )
+
+
+    # =========== Publish Real-time Analytics Streams ===========
+    # Sales Aggregation
+    # Process clean transactions for sales metrics (hourly, category, country)
+    sales_aggregation_writer = (parsed_transaction_df
+        .writeStream
+        .outputMode("append")
+        .foreachBatch(process_sales_aggregation_batch)
+        .option("checkpointLocation", PATHS['checkpoint_sales_aggregation'])
+        .start()
+        )
+
+    # Cart Abandonment Detection
+    # Process carts and detect abandonment using transaction data
+    cart_abandonment_writer = (parsed_cart_df
+        .writeStream
+        .outputMode("append")
+        .foreachBatch(process_cart_abandonment_batch)
+        .option("checkpointLocation", PATHS['checkpoint_cart_abandonment'])
+        .start()
+        )
     
-    print("\n✓ Streaming To Disk started")
+
+    print("\n✓ Streaming Pipeline Started")
+    print("  - Data Quality Streams: Users, Products, Views, Carts, Transactions")
+    print("  - Analytics Streams: Sales Aggregation, Cart Abandonment")
     print("  - Spark UI: http://localhost:4040")
+
     user_writer.awaitTermination(10000)
     product_writer.awaitTermination(10000)
     views_writer.awaitTermination(10000)
     cart_writer.awaitTermination(10000)
     transaction_writer.awaitTermination(10000)
+    sales_aggregation_writer.awaitTermination(10000)
+    cart_abandonment_writer.awaitTermination(10000)
 
 if __name__ == "__main__":
     try:
