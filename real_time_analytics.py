@@ -6,7 +6,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
     col, when, lit, current_timestamp, window,
     sum as spark_sum, count, avg, max as spark_max, min as spark_min,
-    explode, hour, date_format, countDistinct, stddev
+    explode, hour, date_format, countDistinct, stddev, expr
 )
 from config import ANOMALY_DETECTION, ALERT_CONFIG, PATHS
 import json
@@ -326,7 +326,71 @@ class RealTimeAnalytics:
                     message=message,
                     data=data
                 )
+                
+        # CART ABANDONMENT DETECTION
 
+    def detect_cart_abandonment(self, cart_stream_df: DataFrame, transaction_stream_df: DataFrame) -> DataFrame:
+        """
+        Detect abandoned carts using watermarking and stream-stream joins
+
+        This properly tracks carts over time and only flags them as abandoned
+        if no transaction occurs within the configured timeout period.
+.
+        """
+        
+        timeout_minutes = self.anomaly_config['cart_abandonment']['timeout_minutes']
+        min_cart_value = self.anomaly_config['cart_abandonment']['min_cart_value']
+
+        # First we add watermarking to both streams (5 mins)
+        cart_with_watermark = cart_stream_df.withWatermark("timestamp", "5 minutes")
+        transaction_with_watermark = transaction_stream_df.withWatermark("timestamp", "5 minutes")
+
+        # Find how much each card is worth by aggregating product prices
+        cart_with_value = cart_with_watermark.withColumn("product", explode("products")) \
+            .withColumn("item_total", col("product.price") * col("product.quantity")) \
+            .groupBy("cart_id", "user_id", "timestamp") \
+            .agg(spark_sum("item_total").alias("cart_value"))
+
+        # Only consider high-value carts which are greater than a configured threshold
+        high_value_carts = cart_with_value.filter(col("cart_value") >= min_cart_value)
+
+        # Now we want to match the carts with transactions made within the timeout period
+        # join logic: same user, transaction made after carrt time and before the timeout period
+        
+        joined = high_value_carts.alias("cart").join(
+            transaction_with_watermark.select("user_id", "timestamp", "transaction_id").alias("trans"),
+            expr(f"""
+                cart.user_id = trans.user_id AND
+                trans.timestamp >= cart.timestamp AND
+                trans.timestamp <= cart.timestamp + INTERVAL {timeout_minutes} MINUTES
+            """),
+            how="left_outer"
+        )
+
+        # Carts with no matching transaction are considered abandoned
+        abandoned_carts = joined.filter(col("trans.transaction_id").isNull()) \
+            .select(
+                col("cart.cart_id").alias("cart_id"),
+                col("cart.user_id").alias("user_id"),
+                col("cart.timestamp").alias("cart_timestamp"),
+                col("cart.cart_value").alias("cart_value")
+            )
+
+        # Add abandonment metadata about the status of the cart, timestamp and the timeout interval used
+        abandoned_carts = abandoned_carts.withColumn(
+            "abandonment_status",
+            lit("abandoned")
+        )
+        abandoned_carts = abandoned_carts.withColumn(
+            "detected_at",
+            current_timestamp()
+        )
+        abandoned_carts = abandoned_carts.withColumn(
+            "timeout_minutes",
+            lit(timeout_minutes)
+        )
+
+        return abandoned_carts
 
 # Abstracted Functions for easier integration
 def detect_transaction_anomalies(df: DataFrame) -> DataFrame:
@@ -348,3 +412,39 @@ def generate_inventory_alerts(df: DataFrame):
     """Generate alerts for low inventory"""
     analyzer = RealTimeAnalytics()
     analyzer.process_inventory_alerts(df)
+    
+def detect_cart_abandonment(cart_df: DataFrame, transaction_df: DataFrame) -> DataFrame:
+    """
+    Detect abandoned carts using watermarking and time-based matching
+
+    Args:
+        cart_df: DataFrame of cart events (must have timestamp as TimestampType)
+        transaction_df: DataFrame of transaction events (must have timestamp as TimestampType)
+
+    Returns:
+        DataFrame of abandoned carts
+    """
+    analyzer = RealTimeAnalytics()
+    return analyzer.detect_cart_abandonment(cart_df, transaction_df)
+
+def aggregate_sales_by_hour(df: DataFrame) -> DataFrame:
+    """Aggregate sales metrics by hour"""
+    analyzer = RealTimeAnalytics()
+    return analyzer.aggregate_sales_by_hour(df)
+
+def aggregate_sales_by_category(df: DataFrame, product_df: DataFrame = None) -> DataFrame:
+    """Aggregate sales by category (optionally provide product_df for category-level aggregation)"""
+    analyzer = RealTimeAnalytics()
+    return analyzer.aggregate_sales_by_category(df, product_df)
+
+def aggregate_sales_by_country(df: DataFrame, user_df: DataFrame = None) -> DataFrame:
+    """Aggregate sales by country (optionally provide user_df for country-level aggregation)"""
+    analyzer = RealTimeAnalytics()
+    return analyzer.aggregate_sales_by_country(df, user_df)
+
+def generate_cart_abandonment_alerts(df: DataFrame):
+    """Generate alerts for abandoned carts"""
+    analyzer = RealTimeAnalytics()
+    analyzer.process_cart_abandonment_alerts(df)
+
+

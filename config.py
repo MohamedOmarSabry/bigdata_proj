@@ -80,7 +80,7 @@ ANOMALY_DETECTION = {
 
     # Cart abandonment detection
     'cart_abandonment': {
-        'timeout_minutes': 30,  # TODO: Review - Consider cart abandoned after this time
+        'timeout_minutes': 15,  # TODO: Review - Consider cart abandoned after this time
         'min_cart_value': 50.0,  # TODO: Review - Only track abandonment for carts above this value
         'track_high_value_carts': True,
     },
