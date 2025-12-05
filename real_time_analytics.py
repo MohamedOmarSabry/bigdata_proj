@@ -148,11 +148,15 @@ class RealTimeAnalytics:
                 severity = "critical" if status in ["out_of_stock", "critical"] else "medium"
 
                 message = f"{status.upper()}: Product {alert['product_id']} has {alert['inventory']} units left"
+
+                # TODO: Bug here review - issue with N/As 
+                category = alert['category'] if 'category' in alert.__fields__ else 'unknown'
+
                 data = {
                     "product_id": alert['product_id'],
                     "inventory": int(alert['inventory']),
                     "status": status,
-                    "category": alert.get('category', 'unknown')
+                    "category": category
                 }
 
                 self.generate_alert(
