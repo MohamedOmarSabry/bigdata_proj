@@ -304,29 +304,6 @@ class RealTimeAnalytics:
 
         return df
 
-    def process_cart_abandonment_alerts(self, abandoned_carts_df: DataFrame):
-        """
-        Generate alerts for abandoned high-value carts
-        """
-        if abandoned_carts_df.count() > 0:
-            abandoned_list = abandoned_carts_df.collect()
-
-            for cart in abandoned_list:
-                message = f"High-value cart abandoned: {cart['cart_id']} (${cart['cart_value']:.2f})"
-                data = {
-                    "cart_id": cart['cart_id'],
-                    "user_id": cart['user_id'],
-                    "cart_value": float(cart['cart_value']),
-                    "cart_timestamp": str(cart['timestamp'])
-                }
-
-                self.generate_alert(
-                    alert_type="cart_abandonment",
-                    severity="medium",
-                    message=message,
-                    data=data
-                )
-                
         # CART ABANDONMENT DETECTION
 
     def detect_cart_abandonment(self, cart_stream_df: DataFrame, transaction_stream_df: DataFrame) -> DataFrame:
@@ -391,60 +368,69 @@ class RealTimeAnalytics:
         )
 
         return abandoned_carts
+    
+    # CART ABANDOMENT ALERTS
+    def process_cart_abandonment_alerts(self, abandoned_carts_df: DataFrame):
+        """
+        Generate alerts for abandoned high-value carts
+        """
+        if abandoned_carts_df.count() > 0:
+            abandoned_list = abandoned_carts_df.collect()
+
+            for cart in abandoned_list:
+                message = f"High-value cart abandoned: {cart['cart_id']} (${cart['cart_value']:.2f})"
+                data = {
+                    "cart_id": cart['cart_id'],
+                    "user_id": cart['user_id'],
+                    "cart_value": float(cart['cart_value']),
+                    "cart_timestamp": str(cart['timestamp'])
+                }
+
+                self.generate_alert(
+                    alert_type="cart_abandonment",
+                    severity="medium",
+                    message=message,
+                    data=data
+                )
+                
 
 # Abstracted Functions for easier integration
+# Anomaly Detection 
 def detect_transaction_anomalies(df: DataFrame) -> DataFrame:
-    """Detect amount-based transaction anomalies"""
     analyzer = RealTimeAnalytics()
     return analyzer.detect_amount_based_anomalies(df)
 
 def detect_low_inventory(df: DataFrame) -> DataFrame:
-    """Detect low inventory products"""
     analyzer = RealTimeAnalytics()
     return analyzer.detect_low_inventory(df)
 
 def generate_transaction_alerts(df: DataFrame):
-    """Generate alerts for transaction anomalies"""
     analyzer = RealTimeAnalytics()
     analyzer.process_transaction_alerts(df)
 
 def generate_inventory_alerts(df: DataFrame):
-    """Generate alerts for low inventory"""
     analyzer = RealTimeAnalytics()
     analyzer.process_inventory_alerts(df)
     
 def detect_cart_abandonment(cart_df: DataFrame, transaction_df: DataFrame) -> DataFrame:
-    """
-    Detect abandoned carts using watermarking and time-based matching
-
-    Args:
-        cart_df: DataFrame of cart events (must have timestamp as TimestampType)
-        transaction_df: DataFrame of transaction events (must have timestamp as TimestampType)
-
-    Returns:
-        DataFrame of abandoned carts
-    """
     analyzer = RealTimeAnalytics()
     return analyzer.detect_cart_abandonment(cart_df, transaction_df)
 
+def generate_cart_abandonment_alerts(df: DataFrame):
+    analyzer = RealTimeAnalytics()
+    analyzer.process_cart_abandonment_alerts(df)
+
+# Sales Aggregation
 def aggregate_sales_by_hour(df: DataFrame) -> DataFrame:
-    """Aggregate sales metrics by hour"""
     analyzer = RealTimeAnalytics()
     return analyzer.aggregate_sales_by_hour(df)
 
 def aggregate_sales_by_category(df: DataFrame, product_df: DataFrame = None) -> DataFrame:
-    """Aggregate sales by category (optionally provide product_df for category-level aggregation)"""
     analyzer = RealTimeAnalytics()
     return analyzer.aggregate_sales_by_category(df, product_df)
 
 def aggregate_sales_by_country(df: DataFrame, user_df: DataFrame = None) -> DataFrame:
-    """Aggregate sales by country (optionally provide user_df for country-level aggregation)"""
     analyzer = RealTimeAnalytics()
     return analyzer.aggregate_sales_by_country(df, user_df)
-
-def generate_cart_abandonment_alerts(df: DataFrame):
-    """Generate alerts for abandoned carts"""
-    analyzer = RealTimeAnalytics()
-    analyzer.process_cart_abandonment_alerts(df)
 
 
