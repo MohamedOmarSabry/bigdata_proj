@@ -8,9 +8,10 @@ from pyspark.sql.functions import (
     sum as spark_sum, count, avg, max as spark_max, min as spark_min,
     explode, hour, date_format, countDistinct, stddev, expr
 )
-from config import ANOMALY_DETECTION, ALERT_CONFIG, PATHS
+from config import ANOMALY_DETECTION, ALERT_CONFIG, KAFKA_CONFIG, PATHS
 import json
 from datetime import datetime
+from kafka import KafkaProducer
 
 
 class RealTimeAnalytics:
@@ -21,6 +22,19 @@ class RealTimeAnalytics:
     def __init__(self):
         self.anomaly_config = ANOMALY_DETECTION
         self.alert_config = ALERT_CONFIG
+        self._kafka_producer = None # Initialize Kafka producer for alerts
+
+    def get_kafka_producer(self):
+        """Get or create Kafka producer for alerts"""
+        if self._kafka_producer is None:
+            try:
+                self._kafka_producer = KafkaProducer(
+                    bootstrap_servers=KAFKA_CONFIG['bootstrap_servers'],
+                    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+                )
+            except Exception as e:
+                print(f"Warning: Could not create Kafka producer for alerts: {e}")
+        return self._kafka_producer
 
     # TRANSACTION ANOMALY DETECTION
 
@@ -106,10 +120,23 @@ class RealTimeAnalytics:
             if data:
                 print(f"   Details: {json.dumps(data, indent=2)}")
 
+        # Send alert to Kafka stream
+        try:
+            producer = self.get_kafka_producer()
+            if producer:
+                producer.send(KAFKA_CONFIG['topics']['alerts'], value=alert)
+                producer.flush()
+        except Exception as e:
+            print(f"Warning: Could not send alert to Kafka: {e}")
+
         # Log to file if enabled
         if 'file' in self.alert_config['notification_methods']:
-            with open(PATHS['alerts_log'], 'a') as f:
-                f.write(json.dumps(alert) + '\n')
+            try:
+                if 'alerts_log' in PATHS:
+                    with open(PATHS['alerts_log'], 'a') as f:
+                        f.write(json.dumps(alert) + '\n')
+            except Exception as e:
+                pass
 
 
     def process_transaction_alerts(self, df: DataFrame):

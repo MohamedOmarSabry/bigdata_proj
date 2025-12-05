@@ -14,8 +14,8 @@ PATHS = {
     'base_dir': os.path.join(BASE_DIR, 'Staging'),
     'clean_data': os.path.join(BASE_DIR, 'Staging', 'clean'),
     'quarantine': os.path.join(BASE_DIR, 'Staging', 'quarantine'),
-    # 'metrics': os.path.join(BASE_DIR, 'Staging', 'metrics'),
     'checkpoints': os.path.join(BASE_DIR, 'Staging', 'checkpoints'),
+    
     # Clean data subdirectories - will store validated/cleaned records
     'clean_users': os.path.join(BASE_DIR, 'Staging', 'clean', 'users'),
     'clean_products': os.path.join(BASE_DIR, 'Staging', 'clean', 'products'),
@@ -38,14 +38,12 @@ PATHS = {
     'checkpoint_transactions': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'transactions'),
     'checkpoint_alerts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'alerts'),
     'checkpoint_metrics': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'metrics'),
-    # # Metrics output directories - for storing computed metrics
-    # 'metrics_sales': os.path.join(BASE_DIR, 'Staging', 'metrics', 'sales'),
-    # 'metrics_inventory': os.path.join(BASE_DIR, 'Staging', 'metrics', 'inventory'),
-    # 'metrics_anomalies': os.path.join(BASE_DIR, 'Staging', 'metrics', 'anomalies'),
-    # 'metrics_cart_abandonment': os.path.join(BASE_DIR, 'Staging', 'metrics', 'cart_abandonment'),
+    'checkpoint_sales_aggregation': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'sales_aggregation'),
+    'checkpoint_cart_abandonment': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'cart_abandonment'),
+
 
     # Alert logs
-    'alerts_log': os.path.join(BASE_DIR, 'Staging', 'alerts.log'),
+    # 'alerts_log': os.path.join(BASE_DIR, 'Staging', 'alerts.log'),
 }
 
 # KAFKA CONFIGURATION
@@ -57,6 +55,15 @@ KAFKA_CONFIG = {
         'views': 'globalmart.product_views',
         'carts': 'globalmart.cart_events',
         'transactions': 'globalmart.transaction_events',
+        
+        # Real-time metrics streams to be consumed by dashboard
+        'metrics_sales_hourly': 'globalmart.metrics.sales_hourly',
+        'metrics_sales_category': 'globalmart.metrics.sales_category',
+        'metrics_sales_country': 'globalmart.metrics.sales_country',
+        'metrics_anomalies': 'globalmart.metrics.anomalies',
+        'metrics_inventory_alerts': 'globalmart.metrics.inventory_alerts',
+        'metrics_abandoned_carts': 'globalmart.metrics.abandoned_carts',
+        'alerts': 'globalmart.alerts',
     },
 }
 
@@ -156,9 +163,7 @@ ALERT_CONFIG = {
     },
     'notification_methods': [
         'console',  # Print to console
-        'file',     # Write to log file
-        # 'email',  # TODO: Configure email alerts
-        # 'slack',  # TODO: Configure Slack webhook
+        'file'     # Write to log file
     ],
     'batch_alerts': True,  # Batch similar alerts to reduce noise
     'alert_cooldown_seconds': 60,  # TODO: Review - Minimum time between similar alerts
@@ -169,6 +174,7 @@ DASHBOARD_CONFIG = {
     'enabled': True,
     'update_interval_seconds': 10,  # TODO: Review - How often to update metrics
     'metrics_retention_hours': 24,  # TODO: Review - How long to keep real-time metrics
+    'time_window_hours': 24,  # Show metrics from last N hours (0 = show all)
     'export_format': 'parquet',  # Format for metrics export
 }
 
