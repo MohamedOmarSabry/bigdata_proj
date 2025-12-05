@@ -178,7 +178,8 @@ class DataQualityValidator:
         # Validate registration date format (ISO format)
         df = self.mark_error(
             df,
-            to_timestamp(col("registration_date")).isNull() & col("registration_date").isNotNull(),
+            col("registration_date").isNotNull() & 
+            ~col("registration_date").rlike(r'^\d{4}-\d{2}-\d{2}'),
             "invalid_date_format: registration_date"
         )
 
@@ -274,7 +275,8 @@ class DataQualityValidator:
         # Validate timestamp format
         df = self.mark_error(
             df,
-            to_timestamp(col("timestamp")).isNull() & col("timestamp").isNotNull(),
+            col("timestamp").isNotNull() & 
+            ~col("timestamp").rlike(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),
             "invalid_date_format: timestamp"
         )
 
@@ -310,10 +312,10 @@ class DataQualityValidator:
         # Validate timestamp format
         df = self.mark_error(
             df,
-            to_timestamp(col("timestamp")).isNull() & col("timestamp").isNotNull(),
+            col("timestamp").isNotNull() & 
+            ~col("timestamp").rlike(r'^\d{4}-\d{2}-\d{2}'),
             "invalid_date_format: timestamp"
         )
-
         # Validate products array is not empty
         df = self.mark_error(
             df,
@@ -362,7 +364,8 @@ class DataQualityValidator:
         # Validate timestamp format
         df = self.mark_error(
             df,
-            to_timestamp(col("timestamp")).isNull() & col("timestamp").isNotNull(),
+            col("timestamp").isNotNull() & 
+            ~col("timestamp").rlike(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),
             "invalid_date_format: timestamp"
         )
 
