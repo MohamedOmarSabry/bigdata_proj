@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Mart - Real-Time Analytics Dashboard</title>
+        <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #cdefff 0%, #a3d8ff 100%);
+            color: #333;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #4b9cd3; /* baby blue title */
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .last-update {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-top: 4px solid #a3d8ff;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .metric-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        .metric-card.anomaly .metric-value { color: #ff6b6b; }
+        .metric-card.inventory .metric-value { color: #ffb347; }
+        .metric-card.carts .metric-value { color: #4b9cd3; }
+        .metric-card.sales .metric-value { color: #2ecc71; }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            min-height: 400px;
+            max-height: 500px;
+            display: flex;
+            flex-direction: column;
+            border-top: 3px solid #a3d8ff;
+        }
+
+        .card h2 {
+            color: #4b9cd3;
+            margin-bottom: 15px;
+            font-size: 20px;
+            border-bottom: 2px solid #a3d8ff;
+            padding-bottom: 10px;
+        }
+
+        .alert-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #ff6b6b;
+            background: #ffecec;
+        }
+
+        .alert-item.high { border-left-color: #ff6b6b; background: #ffecec; }
+        .alert-item.medium { border-left-color: #ffb347; background: #fff4df; }
+        .alert-item.critical { border-left-color: #e74c3c; background: #ffe2e0; }
+
+        .alert-time {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .alert-message {
+            font-weight: 500;
+            margin: 5px 0;
+        }
+
+        .card > div {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        .table-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border-spacing: 0;
+            margin-top: 0;
+            font-size: 13px;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        th, td {
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid #e3f2fd;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #4b9cd3;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Ensure content scrolls behind header */
+        tbody {
+            position: relative;
+        }
+
+        tr:hover td {
+            background: #f0f7ff;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge.high { background: #ff6b6b; color: white; }
+        .badge.low { background: #ffb347; color: white; }
+        .badge.critical { background: #e74c3c; color: white; }
+        .badge.out_of_stock { background: #c0392b; color: white; }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 768px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .refresh-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #2ecc71;
+            margin-left: 10px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Custom scrollbar styling */
+        .card > div::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .card > div::-webkit-scrollbar-track {
+            background: #e3f2fd;
+            border-radius: 4px;
+        }
+
+        .card > div::-webkit-scrollbar-thumb {
+            background: #4b9cd3;
+            border-radius: 4px;
+        }
+
+        .card > div::-webkit-scrollbar-thumb:hover {
+            background: #3b82c4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Global Mart - Real-Time Analytics Dashboard</h1>
+            <p class="last-update">Last Updated: <span id="lastUpdate">Loading...</span> <span class="refresh-indicator"></span></p>
+            <p class="last-update" style="font-size: 12px; color: #888; margin-top: 5px;">📊 Showing metrics from last 24 hours</p>
+        </header>
+
+        <!-- Summary Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card anomaly">
+                <div class="metric-label">Transaction Anomalies</div>
+                <div class="metric-value" id="anomalyCount">-</div>
+            </div>
+            <div class="metric-card inventory">
+                <div class="metric-label">Low Stock Alerts</div>
+                <div class="metric-value" id="lowStockCount">-</div>
+            </div>
+            <div class="metric-card carts">
+                <div class="metric-label">Abandoned Carts</div>
+                <div class="metric-value" id="abandonedCartsCount">-</div>
+            </div>
+            <div class="metric-card sales">
+                <div class="metric-label">Total Sales</div>
+                <div class="metric-value" id="totalSales">-</div>
+            </div>
+        </div>
+
+        <!-- Alerts Section -->
+        <div class="content-grid">
+            <div class="card full-width">
+                <h2>Recent Alerts</h2>
+                <div id="alertsList" class="loading">Loading alerts...</div>
+            </div>
+        </div>
+
+        <!-- Anomalies and Inventory -->
+        <div class="content-grid">
+            <div class="card">
+                <h2>Transaction Anomalies</h2>
+                <div id="anomaliesTable" class="loading">Loading...</div>
+            </div>
+            <div class="card">
+                <h2>Inventory Alerts</h2>
+                <div id="inventoryTable" class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Sales Metrics -->
+        <div class="content-grid">
+            <div class="card">
+                <h2>Sales by Hour</h2>
+                <div id="hourlySalesTable" class="loading">Loading...</div>
+            </div>
+            <div class="card">
+                <h2>Sales by Category</h2>
+                <div id="categorySalesTable" class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Abandoned Carts and Country Sales -->
+        <div class="content-grid">
+            <div class="card">
+                <h2>Abandoned Carts</h2>
+                <div id="abandonedCartsTable" class="loading">Loading...</div>
+            </div>
+            <div class="card">
+                <h2>Sales by Country</h2>
+                <div id="countrySalesTable" class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Session Analysis Section -->
+        <div class="content-grid">
+            <div class="card">
+                <h2>Session Summary</h2>
+                <div id="sessionSummary" class="loading">Loading...</div>
+            </div>
+            <div class="card">
+                <h2>Recent Sessions</h2>
+                <div id="sessionsTable" class="loading">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Format currency
+        function formatCurrency(value) {
+            return '$' + parseFloat(value).toFixed(2);
+        }
+
+        // Format timestamp
+        function formatTime(timestamp) {
+            return new Date(timestamp).toLocaleString();
+        }
+
+        // Track seen inventory alerts (using product_id + timestamp as unique key)
+        let seenInventoryAlerts = new Set();
+        let inventoryAlertsHistory = [];
+
+        // Update summary metrics
+        async function updateSummary() {
+            try {
+                const response = await fetch('/api/metrics/summary');
+                const data = await response.json();
+
+                document.getElementById('anomalyCount').textContent = data.anomaly_count || 0;
+                document.getElementById('lowStockCount').textContent = data.low_stock_count || 0;
+                document.getElementById('abandonedCartsCount').textContent = data.abandoned_carts_count || 0;
+                document.getElementById('totalSales').textContent = formatCurrency(data.total_sales || 0);
+                document.getElementById('lastUpdate').textContent = formatTime(data.timestamp);
+            } catch (error) {
+                console.error('Error updating summary:', error);
+            }
+        }
+
+        // Update recent alerts
+        async function updateAlerts() {
+            try {
+                const response = await fetch('/api/alerts/recent');
+                const data = await response.json();
+                const alertsList = document.getElementById('alertsList');
+
+                if (data.recent_events && data.recent_events.length > 0) {
+                    alertsList.innerHTML = data.recent_events.map(alert => `
+                        <div class="alert-item ${alert.severity}">
+                            <div class="alert-time">${formatTime(alert.timestamp)}</div>
+                            <div class="alert-message">[${alert.type.toUpperCase()}] ${alert.message}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    alertsList.innerHTML = '<p>No recent alerts</p>';
+                }
+            } catch (error) {
+                console.error('Error updating alerts:', error);
+                document.getElementById('alertsList').innerHTML = '<p>Error loading alerts</p>';
+            }
+        }
+
+        // Update anomalies table
+        async function updateAnomalies() {
+            try {
+                const response = await fetch('/api/anomalies');
+                const data = await response.json();
+                const table = document.getElementById('anomaliesTable');
+
+                if (data.recent_events && data.recent_events.length > 0) {
+                    table.innerHTML = `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Transaction ID</th>
+                                        <th>Amount</th>
+                                        <th>Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.recent_events.map(item => `
+                                        <tr>
+                                            <td>${item.transaction_id}</td>
+                                            <td>${formatCurrency(item.total_amount)}</td>
+                                            <td><span class="badge ${item.transaction_anomaly}">${item.transaction_anomaly}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    table.innerHTML = '<p>No anomalies detected</p>';
+                }
+            } catch (error) {
+                console.error('Error updating anomalies:', error);
+                document.getElementById('anomaliesTable').innerHTML = '<p>Error loading data</p>';
+            }
+        }
+
+        // Update inventory alerts (accumulative with max limit)
+        async function updateInventory() {
+            try {
+                const response = await fetch('/api/inventory/alerts');
+                const data = await response.json();
+                const table = document.getElementById('inventoryTable');
+                const MAX_ALERTS = 20; // Configurable limit
+
+                if (data.recent_events && data.recent_events.length > 0) {
+                    // Find new alerts that we haven't seen before
+                    const newAlerts = data.recent_events.filter(item => {
+                        // Create unique key using product_id and timestamp (if available)
+                        const key = `${item.product_id}_${item.processed_at || item.timestamp || ''}`;
+
+                        if (!seenInventoryAlerts.has(key)) {
+                            seenInventoryAlerts.add(key);
+                            return true;
+                        }
+                        return false;
+                    });
+
+                    // Add new alerts to the beginning of history (newest first)
+                    if (newAlerts.length > 0) {
+                        inventoryAlertsHistory = [...newAlerts, ...inventoryAlertsHistory];
+
+                        // Trim to max limit
+                        if (inventoryAlertsHistory.length > MAX_ALERTS) {
+                            inventoryAlertsHistory = inventoryAlertsHistory.slice(0, MAX_ALERTS);
+                        }
+                    }
+
+                    // Render the accumulated history
+                    if (inventoryAlertsHistory.length > 0) {
+                        table.innerHTML = `
+                            <div class="table-wrapper">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Product ID</th>
+                                            <th>Inventory</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${inventoryAlertsHistory.map(item => `
+                                            <tr>
+                                                <td>${item.product_id}</td>
+                                                <td>${item.inventory}</td>
+                                                <td><span class="badge ${item.inventory_status}">${item.inventory_status}</span></td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    } else {
+                        table.innerHTML = '<p>No inventory alerts</p>';
+                    }
+                } else if (inventoryAlertsHistory.length > 0) {
+                    // Keep showing existing alerts even if API returns empty
+                    table.innerHTML = `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Product ID</th>
+                                        <th>Inventory</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${inventoryAlertsHistory.map(item => `
+                                        <tr>
+                                            <td>${item.product_id}</td>
+                                            <td>${item.inventory}</td>
+                                            <td><span class="badge ${item.inventory_status}">${item.inventory_status}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    table.innerHTML = '<p>No inventory alerts</p>';
+                }
+            } catch (error) {
+                console.error('Error updating inventory:', error);
+                document.getElementById('inventoryTable').innerHTML = '<p>Error loading data</p>';
+            }
+        }
+
+        // Update hourly sales
+        async function updateHourlySales() {
+            try {
+                const response = await fetch('/api/metrics/sales/hourly');
+                const data = await response.json();
+                const table = document.getElementById('hourlySalesTable');
+
+                if (data.data && data.data.length > 0) {
+                    table.innerHTML = `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Hour</th>
+                                        <th>Sales</th>
+                                        <th>Transactions</th>
+                                        <th>Unique Customers</th>
+                                        <th>Avg Value</th>
+                                        <th>Sales Velocity</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.data.map(item => `
+                                        <tr>
+                                            <td>${item.hour}:00</td>
+                                            <td>${formatCurrency(item.total_sales)}</td>
+                                            <td>${item.transaction_count}</td>
+                                            <td>${item.unique_customers || 0}</td>
+                                            <td>${formatCurrency(item.avg_transaction_value || 0)}</td>
+                                            <td>${formatCurrency((item.sales_velocity || 0))}/sec</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    table.innerHTML = '<p>No sales data available</p>';
+                }
+            } catch (error) {
+                console.error('Error updating hourly sales:', error);
+                document.getElementById('hourlySalesTable').innerHTML = '<p>Error loading data</p>';
+            }
+        }
+
+        // Update category sales
+        async function updateCategorySales() {
+            try {
+                const response = await fetch('/api/metrics/sales/category');
+                const data = await response.json();
+                const table = document.getElementById('categorySalesTable');
+
+                if (data.data && data.data.length > 0) {
+                    table.innerHTML = `
+                        <div class="table-wrapper">
+                            <table style="font-size: 11px;">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th>Revenue</th>
+                                        <th>Units</th>
+                                        <th>Trans</th>
+                                        <th>Prods</th>
+                                        <th>Cust</th>
+                                        <th>Avg $</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.data.map(item => `
+                                        <tr>
+                                            <td>${item.category}</td>
+                                            <td>${formatCurrency(item.total_revenue)}</td>
+                                            <td>${item.total_units_sold}</td>
+                                            <td>${item.transaction_count}</td>
+                                            <td>${item.unique_products || 0}</td>
+                                            <td>${item.total_unique_customers || 0}</td>
+                                            <td>${formatCurrency(item.avg_product_price || 0)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    table.innerHTML = '<p>No category data available</p>';
+                }
+            } catch (error) {
+                console.error('Error updating category sales:', error);
+                document.getElementById('categorySalesTable').innerHTML = '<p>Error loading data</p>';
+            }
+        }
+
+        // Update abandoned carts
+        async function updateAbandonedCarts() {
+            try {
+                const response = await fetch('/api/carts/abandoned');
+                const data = await response.json();
+                const table = document.getElementById('abandonedCartsTable');
+
+                if (data.recent_events && data.recent_events.length > 0) {
+                    table.innerHTML = `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Cart ID</th>
+                                        <th>User ID</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.recent_events.map(item => `
+                                        <tr>
+                                            <td>${item.cart_id}</td>
+                                            <td>${item.user_id}</td>
+                                            <td>${formatCurrency(item.cart_value)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    table.innerHTML = '<p>No abandoned carts detected</p>';
+                }
+            } catch (error) {
+                console.error('Error updating abandoned carts:', error);
+                document.getElementById('abandonedCartsTable').innerHTML = '<p>Error loading data</p>';
+            }
+        }
+
+        // Update country sales
+        async function updateCountrySales() {
+            try {
+                const response = await fetch('/api/metrics/sales/country');
+                const data = await response.json();
+                const table = document.getElementById('countrySalesTable');
+
+                if (data.data && data.data.length > 0) {
+                    table.innerHTML = `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Country</th>
+                                        <th>Sales</th>
+                                        <th>Transactions</th>
+                                        <th>Customers</th>
+                                        <th>Avg Value</th>
+                                        <th>Sales %</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.data.map(item => `
+                                        <tr>
+                                            <td>${item.country}</td>
+                                            <td>${formatCurrency(item.total_sales)}</td>
+                                            <td>${item.transaction_count}</td>
+                                            <td>${item.unique_customers || 0}</td>
+                                            <td>${formatCurrency(item.avg_transaction_value || 0)}</td>
+                                            <td>${(item.sales_percentage || 0).toFixed(1)}%</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    table.innerHTML = '<p>No country data available</p>';
+                }
+            } catch (error) {
+                console.error('Error updating country sales:', error);
+                document.getElementById('countrySalesTable').innerHTML = '<p>Error loading data</p>';
+            }
+        }
+
+        // Format duration in human readable format
+        function formatDuration(seconds) {
+            if (!seconds || seconds < 0) return '0s';
+            if (seconds < 60) return Math.round(seconds) + 's';
+            if (seconds < 3600) return Math.round(seconds / 60) + 'm ' + Math.round(seconds % 60) + 's';
+            return Math.round(seconds / 3600) + 'h ' + Math.round((seconds % 3600) / 60) + 'm';
+        }
+
+        // Update session summary
+        async function updateSessions() {
+            try {
+                const response = await fetch('/api/sessions');
+                const data = await response.json();
+                const summaryDiv = document.getElementById('sessionSummary');
+                const tableDiv = document.getElementById('sessionsTable');
+
+                if (data.summary) {
+                    const s = data.summary;
+                    summaryDiv.innerHTML = `
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                            <div style="padding: 15px; background: #f0f7ff; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold; color: #4b9cd3;">${s.total_sessions}</div>
+                                <div style="color: #666; font-size: 12px;">Total Sessions</div>
+                            </div>
+                            <div style="padding: 15px; background: #e8f5e9; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold; color: #2ecc71;">${s.conversion_rate}%</div>
+                                <div style="color: #666; font-size: 12px;">Conversion Rate</div>
+                            </div>
+                            <div style="padding: 15px; background: #fff3e0; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold; color: #ffb347;">${formatDuration(s.avg_duration_seconds)}</div>
+                                <div style="color: #666; font-size: 12px;">Avg Duration</div>
+                            </div>
+                            <div style="padding: 15px; background: #fce4ec; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold; color: #e91e63;">${s.avg_views_per_session}</div>
+                                <div style="color: #666; font-size: 12px;">Avg Views/Session</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px; font-size: 12px;">
+                            <span style="margin-right: 15px;"><strong>Converted:</strong> ${s.converted_sessions}</span>
+                            <span style="margin-right: 15px;"><strong>Cart Abandoned:</strong> ${s.cart_abandoned_sessions}</span>
+                            <span><strong>Browse Only:</strong> ${s.browse_only_sessions}</span>
+                        </div>
+                    `;
+                } else {
+                    summaryDiv.innerHTML = '<p>No session data available</p>';
+                }
+
+                if (data.sessions && data.sessions.length > 0) {
+                    tableDiv.innerHTML = `
+                        <div class="table-wrapper">
+                            <table style="font-size: 11px;">
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Duration</th>
+                                        <th>Views</th>
+                                        <th>Cart</th>
+                                        <th>Type</th>
+                                        <th>Path</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.sessions.slice(0, 20).map(session => `
+                                        <tr>
+                                            <td title="${session.session_id}">${session.user_id ? session.user_id.substring(0, 12) : 'N/A'}...</td>
+                                            <td>${formatDuration(session.duration_seconds)}</td>
+                                            <td>${session.view_count || 0}</td>
+                                            <td>${session.cart_count || 0}</td>
+                                            <td><span class="badge ${session.session_type === 'converted' ? 'high' : session.session_type === 'cart_abandoned' ? 'low' : ''}" style="background: ${session.session_type === 'converted' ? '#2ecc71' : session.session_type === 'cart_abandoned' ? '#ffb347' : '#95a5a6'};">${session.session_type || 'unknown'}</span></td>
+                                            <td title="${session.activity_path || ''}">${(session.activity_path || '').substring(0, 30)}${(session.activity_path || '').length > 30 ? '...' : ''}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    tableDiv.innerHTML = '<p>No sessions available</p>';
+                }
+            } catch (error) {
+                console.error('Error updating sessions:', error);
+                document.getElementById('sessionSummary').innerHTML = '<p>Error loading session data</p>';
+                document.getElementById('sessionsTable').innerHTML = '<p>Error loading session data</p>';
+            }
+        }
+
+        // Update all dashboard data
+        function updateDashboard() {
+            updateSummary();
+            updateAlerts();
+            updateAnomalies();
+            updateInventory();
+            updateHourlySales();
+            updateCategorySales();
+            updateAbandonedCarts();
+            updateCountrySales();
+            updateSessions();
+        }
+
+        // Initial load
+        updateDashboard();
+
+        // Auto-refresh every 5 seconds
+        setInterval(updateDashboard, 5000);
+    </script>
+</body>
+</html>
