@@ -71,9 +71,8 @@ KAFKA_CONFIG = {
 ANOMALY_DETECTION = {
     # Transaction-based anomalies
     'transaction': {
-        'max_amount': 5000.0,  # TODO: Review - Flag transactions above this amount
+        'max_amount': 10000.0,  # TODO: Review - Flag transactions above this amount
         'min_amount': 0.01,    # TODO: Review - Flag transactions below this amount (potential data errors)
-        'frequency_window_seconds': 300,  # TODO: Review - Time window for frequency analysis (5 minutes)
         'max_transactions_per_window': 10,  # TODO: Review - Max transactions per user in the time window
         'velocity_check_enabled': True,  # Enable velocity-based fraud detection
     },
@@ -87,8 +86,8 @@ ANOMALY_DETECTION = {
 
     # Cart abandonment detection
     'cart_abandonment': {
-        'timeout_minutes': 15,  # TODO: Review - Consider cart abandoned after this time
-        'min_cart_value': 50.0,  # TODO: Review - Only track abandonment for carts above this value
+        'timeout_minutes': 1,  # TODO: Review - Consider cart abandoned after this time
+        'min_cart_value': 25.0,
         'track_high_value_carts': True,
     },
 
@@ -106,7 +105,7 @@ DATA_QUALITY = {
         'type_conversion',      # Try to convert data types (e.g., "123" -> 123)
         'trim_whitespace',      # Remove leading/trailing spaces
         'format_dates',         # Standardize date formats
-        'replace_corrupted',    # TODO: Replace "<corrupted>" with NULL
+        'replace_corrupted',
     ],
 
     # Reject/quarantine conditions
@@ -172,10 +171,10 @@ ALERT_CONFIG = {
 # Dashboard Configuration
 DASHBOARD_CONFIG = {
     'enabled': True,
-    'update_interval_seconds': 10,  # TODO: Review - How often to update metrics
-    'metrics_retention_hours': 24,  # TODO: Review - How long to keep real-time metrics
-    'time_window_hours': 24,  # Show metrics from last N hours (0 = show all)
-    'export_format': 'parquet',  # Format for metrics export
+    'update_interval_seconds': 5,
+    'metrics_retention_hours': 24, # REVIEW - what is the difference between this and time window hours?
+    'time_window_hours': 24,
+    'export_format': 'parquet', # REVIEW - we dont need to export?
 }
 
 def create_directories():
@@ -190,14 +189,4 @@ def create_directories():
     print("✓ All directories created/verified")
 
 if __name__ == "__main__":
-    # Test: create directories and print configuration
     create_directories()
-    # print("\n" + "="*60)
-    # print("CONFIGURATION SUMMARY")
-    # print("="*60)
-    # print(f"\nBase Directory: {BASE_DIR}")
-    # print(f"\nKafka Bootstrap: {KAFKA_CONFIG['bootstrap_servers']}")
-    # print(f"\nTransaction Anomaly Threshold: ${ANOMALY_DETECTION['transaction']['max_amount']}")
-    # print(f"Low Stock Threshold: {ANOMALY_DETECTION['inventory']['low_stock_threshold']} units")
-    # print(f"Cart Abandonment Timeout: {ANOMALY_DETECTION['cart_abandonment']['timeout_minutes']} minutes")
-    # print("\n" + "="*60)

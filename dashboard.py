@@ -20,8 +20,17 @@ from collections import deque
 
 app = Flask(__name__)
 
-# In-memory cache for metrics data
-metrics_cache = {
+# Cumulative counters for metrics (monotonically increasing)
+metrics_counters = {
+    'total_anomalies': 0,
+    'total_inventory_alerts': 0,
+    'total_abandoned_carts': 0,
+    'total_sales': 0.0,
+    'total_transactions': 0,
+}
+
+# Bounded deques for storing recent event details (for display)
+recent_events = {
     'sales_hourly': deque(maxlen=100),
     'sales_category': deque(maxlen=100),
     'sales_country': deque(maxlen=100),
@@ -70,9 +79,20 @@ def consume_kafka_topic(topic_name, cache_key):
                 if 'consumed_at' not in data:
                     data['consumed_at'] = datetime.now().isoformat()
 
-                # Add to cache (thread-safe)
+                # Add to cache and update counters (thread-safe)
                 with cache_lock:
-                    metrics_cache[cache_key].append(data)
+                    recent_events[cache_key].append(data)
+
+                    # Increment counters based on event type
+                    if cache_key == 'anomalies' and data.get('is_anomaly'):
+                        metrics_counters['total_anomalies'] += 1
+                    elif cache_key == 'inventory_alerts' and data.get('needs_alert'):
+                        metrics_counters['total_inventory_alerts'] += 1
+                    elif cache_key == 'abandoned_carts':
+                        metrics_counters['total_abandoned_carts'] += 1
+                    elif cache_key == 'sales_hourly':
+                        metrics_counters['total_sales'] += float(data.get('total_sales', 0))
+                        metrics_counters['total_transactions'] += int(data.get('transaction_count', 0))
 
             except Exception as e:
                 print(f"Error processing message from {topic_name}: {e}")
@@ -144,34 +164,22 @@ def index():
 
 @app.route('/api/metrics/summary')
 def get_metrics_summary():
-    """Get summary of all metrics"""
+    """Get summary of all metrics using stable counters"""
     try:
-        time_window_hours = DASHBOARD_CONFIG.get('time_window_hours', 0)
-
         with cache_lock:
-            # Filter data by time window
-            anomalies = apply_time_filter(list(metrics_cache['anomalies']), time_window_hours)
-            inventory_alerts = apply_time_filter(list(metrics_cache['inventory_alerts']), time_window_hours)
-            abandoned_carts = apply_time_filter(list(metrics_cache['abandoned_carts']), time_window_hours)
-            sales_hourly = apply_time_filter(list(metrics_cache['sales_hourly']), time_window_hours)
-
-            # Count anomalies
-            anomaly_count = len([a for a in anomalies if a.get('is_anomaly')])
-
-            # Count inventory alerts
-            low_stock_count = len([a for a in inventory_alerts if a.get('needs_alert')])
-
-            # Count abandoned carts
-            abandoned_count = len(abandoned_carts)
-
-            # Sum total sales from hourly metrics
-            total_sales = sum(float(s.get('total_sales', 0)) for s in sales_hourly)
+            # Use stable counters for metrics (not affected by cache limits)
+            anomaly_count = metrics_counters['total_anomalies']
+            low_stock_count = metrics_counters['total_inventory_alerts']
+            abandoned_count = metrics_counters['total_abandoned_carts']
+            total_sales = metrics_counters['total_sales']
+            total_transactions = metrics_counters['total_transactions']
 
         return jsonify({
             'anomaly_count': anomaly_count,
             'low_stock_count': low_stock_count,
             'abandoned_carts_count': abandoned_count,
             'total_sales': round(total_sales, 2),
+            'total_transactions': total_transactions,
             'timestamp': datetime.now().isoformat()
         })
     except Exception as e:
@@ -186,14 +194,14 @@ def get_recent_alerts():
     """Get recent alerts from Kafka stream"""
     try:
         with cache_lock:
-            # Get alerts from cache (already in reverse chronological order)
-            alerts = list(metrics_cache['alerts'])
+            # Get alerts from recent events cache
+            alerts = list(recent_events['alerts'])
 
         # Sort by timestamp (newest first)
         alerts.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
 
         return jsonify({
-            'alerts': alerts[:20],
+            'recent_events': alerts[:20],
             'count': len(alerts)
         })
     except Exception as e:
@@ -208,7 +216,7 @@ def get_hourly_sales():
         time_window_hours = DASHBOARD_CONFIG.get('time_window_hours', 0)
 
         with cache_lock:
-            data = list(metrics_cache['sales_hourly'])
+            data = list(recent_events['sales_hourly'])
 
         # Apply time filter
         data = apply_time_filter(data, time_window_hours)
@@ -257,7 +265,7 @@ def get_category_sales():
         time_window_hours = DASHBOARD_CONFIG.get('time_window_hours', 0)
 
         with cache_lock:
-            data = list(metrics_cache['sales_category'])
+            data = list(recent_events['sales_category'])
 
         # Apply time filter
         data = apply_time_filter(data, time_window_hours)
@@ -308,7 +316,7 @@ def get_country_sales():
         time_window_hours = DASHBOARD_CONFIG.get('time_window_hours', 0)
 
         with cache_lock:
-            data = list(metrics_cache['sales_country'])
+            data = list(recent_events['sales_country'])
 
         # Apply time filter
         data = apply_time_filter(data, time_window_hours)
@@ -359,17 +367,18 @@ def get_anomalies():
         time_window_hours = DASHBOARD_CONFIG.get('time_window_hours', 0)
 
         with cache_lock:
-            data = list(metrics_cache['anomalies'])
+            data = list(recent_events['anomalies'])
+            total_count = metrics_counters['total_anomalies']
 
         # Apply time filter
         data = apply_time_filter(data, time_window_hours)
 
-        # Filter only anomalies
+        # Filter only anomalies for display
         anomalies = [d for d in data if d.get('is_anomaly')]
 
         return jsonify({
-            'data': anomalies[:20],
-            'count': len(anomalies)
+            'count': total_count,  # Stable counter
+            'recent_events': anomalies[:20]  # Recent events for display
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -382,17 +391,18 @@ def get_inventory_alerts():
         time_window_hours = DASHBOARD_CONFIG.get('time_window_hours', 0)
 
         with cache_lock:
-            data = list(metrics_cache['inventory_alerts'])
+            data = list(recent_events['inventory_alerts'])
+            total_count = metrics_counters['total_inventory_alerts']
 
         # Apply time filter
         data = apply_time_filter(data, time_window_hours)
 
-        # Filter only items that need alerts
+        # Filter only items that need alerts for display
         alerts = [d for d in data if d.get('needs_alert')]
 
         return jsonify({
-            'data': alerts[:20],
-            'count': len(alerts)
+            'count': total_count,  # Stable counter
+            'recent_events': alerts[:20]  # Recent events for display
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -405,14 +415,15 @@ def get_abandoned_carts():
         time_window_hours = DASHBOARD_CONFIG.get('time_window_hours', 0)
 
         with cache_lock:
-            data = list(metrics_cache['abandoned_carts'])
+            data = list(recent_events['abandoned_carts'])
+            total_count = metrics_counters['total_abandoned_carts']
 
-        # Apply time filter
+        # Apply time filter for display
         data = apply_time_filter(data, time_window_hours)
 
         return jsonify({
-            'data': data[:20],
-            'count': len(data)
+            'count': total_count,  # Stable counter
+            'recent_events': data[:20]  # Recent events for display
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

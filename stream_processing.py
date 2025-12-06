@@ -279,7 +279,7 @@ def process_cart_abandonment_batch(cart_batch_df, batch_id):
                 .agg(spark_sum("item_total").alias("cart_value"))
 
             # Filter high-value carts (threshold from config)
-            high_value_carts = cart_with_value.filter(col("cart_value") >= ANOMALY_DETECTION['cart_abandonment']['high_value_threshold'])
+            high_value_carts = cart_with_value.filter(col("cart_value") >= ANOMALY_DETECTION['cart_abandonment']['min_cart_value'])
 
             if high_value_carts.count() > 0:
                 # Write to Kafka stream
