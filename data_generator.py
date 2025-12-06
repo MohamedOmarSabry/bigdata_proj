@@ -282,8 +282,10 @@ class GlobalMartProducer:
         print(f"Started {num_threads} producer threads")
         try:
             if run_seconds is None:
-                while True:
+                print("Running indefinitely... Press Ctrl+C to stop.")
+                while self.running:
                     time.sleep(1)
+
             else:
                 time.sleep(run_seconds)
         except KeyboardInterrupt:
