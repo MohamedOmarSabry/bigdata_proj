@@ -18,6 +18,8 @@ import json
 import shutil, os
 from pyspark.sql.functions import explode
 
+from config import PATHS
+
 def create_spark_session():
     """Create Spark session"""
     return SparkSession.builder \
@@ -653,11 +655,11 @@ def ETL_batch():
     spark = create_spark_session()
     spark.sparkContext.setLogLevel("ERROR")
     # Read all parquet files written by your streaming job
-    users_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/users/")
-    views_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/views/")
-    transactions_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/transactions/")
-    carts_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/carts/")
-    products_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/products/")
+    users_df = spark.read.parquet(PATHS['clean_users'])
+    views_df = spark.read.parquet(PATHS['clean_views'])
+    transactions_df = spark.read.parquet(PATHS['clean_transactions'])
+    carts_df = spark.read.parquet(PATHS['clean_carts'])
+    products_df = spark.read.parquet(PATHS['clean_products'])
     # Now you can do normal batch ETL
     users_df.printSchema()
     users_df.show(1,truncate=False)
