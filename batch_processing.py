@@ -130,16 +130,6 @@ def create_tables(cur):
             PRIMARY KEY (Customer_Key, Preference_Key)
         );
     """)
-    # cur.execute("""
-    #     SELECT conname, contype, conkey
-    # FROM pg_constraint
-    # WHERE conrelid = 'dim_product'::regclass;
-    # """)
-    # constraints = cur.fetchall()
-    # # Print each row
-    # for row in constraints:
-    #     print(row)
-    # cur.execute("ALTER TABLE dim_product DROP CONSTRAINT dim_product_product_id_key;")
     cur.execute("""
     CREATE TABLE IF NOT EXISTS Dim_Product (
         Product_Key SERIAL PRIMARY KEY,
@@ -153,15 +143,6 @@ def create_tables(cur):
         UNIQUE (Product_id, valid_from)
         );
     """)
-    # cur.execute("""
-    #     CREATE UNIQUE INDEX IF NOT EXISTS u_product_current
-    #     ON Dim_Product (Product_id)
-    #     WHERE is_current = TRUE;
-    # """)
-    # cur.execute("""
-    # ALTER TABLE Dim_Product
-    # ALTER COLUMN Product_id TYPE VARCHAR(50);
-    # """)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS Dim_Date (
         Date_Key INT PRIMARY KEY,
@@ -191,18 +172,6 @@ def create_tables(cur):
         Timestamp TIMESTAMP NOT NULL
         );
     """)
-    # cur.execute("""
-    # ALTER TABLE Fact_ProductView
-    # ALTER COLUMN Event_id TYPE VARCHAR(50);       
-    # """)
-    # cur.execute("""
-    # ALTER TABLE Fact_ProductView
-    # ALTER COLUMN User_id TYPE VARCHAR(50);       
-    # """)
-    # cur.execute("""
-    # ALTER TABLE Fact_ProductView
-    # ALTER COLUMN Product_id TYPE VARCHAR(50);       
-    # """)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS Fact_TransactionEvent (
         Transaction_Key SERIAL PRIMARY KEY,
@@ -219,20 +188,6 @@ def create_tables(cur):
         UNIQUE (transaction_id, product_key)
         );
     """)
-    
-    # cur.execute("""
-    # DELETE FROM fact_transactionevent a
-    # USING fact_transactionevent b
-    # WHERE a.transaction_id = b.transaction_id
-    # AND a.product_key = b.product_key
-    # AND a.ctid < b.ctid;
-    # ALTER TABLE fact_transactionevent
-    # ADD CONSTRAINT uniq_transaction_product UNIQUE (transaction_id, product_key);       
-    # """)
-    # cur.execute("""
-    # ALTER TABLE Fact_TransactionEvent
-    # ADD CONSTRAINT uniq_transaction_product UNIQUE (transaction_id, product_key);       
-    # """)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS Fact_CartEvent (
         CartEvent_Key SERIAL PRIMARY KEY,
@@ -247,19 +202,6 @@ def create_tables(cur):
         UNIQUE (cart_id, product_key)
         );
     """)
-    # cur.execute("""
-    # DELETE FROM Fact_CartEvent a
-    # USING Fact_CartEvent b
-    # WHERE a.cart_id = b.cart_id
-    # AND a.product_key = b.product_key
-    # AND a.ctid < b.ctid;
-    # ALTER TABLE Fact_CartEvent
-    # ADD CONSTRAINT uniq_cart_product UNIQUE (cart_id, product_key);          
-    # """)
-    # cur.execute("""
-    # ALTER TABLE Fact_CartEvent
-    # ALTER COLUMN Cart_id TYPE VARCHAR(50);       
-    # """)
 def print_row_count(cur, table_name):
     cur.execute(f"SELECT COUNT(*) FROM {table_name};")
     count = cur.fetchone()[0]
