@@ -43,7 +43,13 @@ PATHS = {
     'checkpoint_transaction_anomalies': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'transaction_anomalies'),
     'checkpoint_inventory_alerts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'inventory_alerts'),
     'checkpoint_sessions': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'sessions'),
-
+    
+    # Batch checkpoint directories 
+    'checkpoint_users_etl': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'users_etl'),
+    'checkpoint_products_etl': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'products_etl'),
+    'checkpoint_views_etl': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'views_etl'),
+    'checkpoint_carts_etl': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'carts_etl'),
+    'checkpoint_transactions_etl': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'transactions_etl'),
     # Session data storage
     'clean_sessions': os.path.join(BASE_DIR, 'Staging', 'clean', 'sessions'),
 }

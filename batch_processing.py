@@ -19,13 +19,19 @@ import shutil, os
 from pyspark.sql.functions import explode
 
 from config import PATHS
+import os, sys
+
+# Set SPARK_HOME to use PySpark from virtual environment
+pyspark_path = os.path.join(sys.prefix, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages', 'pyspark')
+os.environ['SPARK_HOME'] = pyspark_path
+
 def define_user_schema():
     return StructType([
         StructField("user_id", StringType(), True),
         StructField("email", StringType(), True),
         StructField("age", IntegerType(), True),
         StructField("country", StringType(), True),
-        StructField("registration_date", StringType(), True),
+        StructField("registration_date", TimestampType(), True),
         StructField("preferences", ArrayType(StringType()), True)
     ])
 def define_product_schema():
@@ -46,13 +52,13 @@ def define_view_schema():
         StructField("event_id", StringType(), True),
         StructField("product_id", StringType(), True),
         StructField("user_id", StringType(), True),
-        StructField("timestamp", StringType(), True)
+        StructField("timestamp", TimestampType(), True)
     ])
 def define_cart_schema():
     return StructType([
         StructField("cart_id", StringType(), True),
         StructField("user_id", StringType(), True),
-        StructField("timestamp", StringType(), True),
+        StructField("timestamp", TimestampType(), True),
         StructField("products", ArrayType(define_cart_product_schema()), True)
     ])
 def define_transaction_schema():
@@ -60,7 +66,7 @@ def define_transaction_schema():
         StructField("transaction_id", StringType(), True),
         StructField("user_id", StringType(), True),
         StructField("total_amount", DoubleType(), True),
-        StructField("timestamp", StringType(), True),
+        StructField("timestamp", TimestampType(), True),
         StructField("payment_method", StringType(), True),
         StructField("products", ArrayType(define_cart_product_schema()), True)
     ])
@@ -257,11 +263,13 @@ def print_table_metadata(cur):
         else:
             print("\nConstraints: None")
 def safe_parse_date(date_value):
+    """Convert to datetime if needed, otherwise return as-is"""
+    if date_value is None:
+        return None
+    if isinstance(date_value, datetime):
+        return date_value
     try:
-        if isinstance(date_value, datetime):
-            return date_value
-        else:
-            return datetime.fromisoformat(date_value)
+        return datetime.fromisoformat(str(date_value))
     except (ValueError, TypeError):
         return None
 def products_scd(cur, products_df):
@@ -696,7 +704,7 @@ def ETL_batch():
     users_stream
         .writeStream
         .foreachBatch(process_users_stream)
-        .option("checkpointLocation", PATHS['checkpoints'])
+        .option("checkpointLocation", PATHS['checkpoint_users_etl'])
         .trigger(once=True)
         .start()
     )
@@ -712,7 +720,7 @@ def ETL_batch():
     views_stream
         .writeStream
         .foreachBatch(process_views_stream)
-        .option("checkpointLocation", PATHS['checkpoints_views'])
+        .option("checkpointLocation", PATHS['checkpoint_views_etl'])
         .trigger(once=True)
         .start()
     )
@@ -728,7 +736,7 @@ def ETL_batch():
     carts_stream
         .writeStream
         .foreachBatch(process_carts_stream)
-        .option("checkpointLocation", PATHS['checkpoints_carts'])
+        .option("checkpointLocation", PATHS['checkpoint_carts_etl'])
         .trigger(once=True)
         .start()
     )
@@ -744,7 +752,7 @@ def ETL_batch():
     transactions_stream
         .writeStream
         .foreachBatch(process_transactions_stream)
-        .option("checkpointLocation", PATHS['checkpoints_transactions'])
+        .option("checkpointLocation", PATHS['checkpoint_transactions_etl'])
         .trigger(once=True)
         .start()
     )
@@ -760,7 +768,7 @@ def ETL_batch():
     products_stream
         .writeStream
         .foreachBatch(process_products_stream)
-        .option("checkpointLocation", PATHS['checkpoints_products'])
+        .option("checkpointLocation", PATHS['checkpoint_products_etl'])
         .trigger(once=True)
         .start()
     )
