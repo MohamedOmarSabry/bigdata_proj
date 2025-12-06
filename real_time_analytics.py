@@ -176,8 +176,11 @@ class RealTimeAnalytics:
 
                 message = f"{status.upper()}: Product {alert['product_id']} has {alert['inventory']} units left"
 
-                # TODO: Bug here review - issue with N/As 
-                category = alert['category'] if 'category' in alert.__fields__ else 'unknown'
+                # Safely get category field - handle Row objects and missing fields
+                try:
+                    category = alert['category'] if alert['category'] is not None else 'unknown'
+                except (KeyError, ValueError):
+                    category = 'unknown'
 
                 data = {
                     "product_id": alert['product_id'],

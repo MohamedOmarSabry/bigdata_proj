@@ -71,22 +71,22 @@ KAFKA_CONFIG = {
 ANOMALY_DETECTION = {
     # Transaction-based anomalies
     'transaction': {
-        'max_amount': 10000.0,  # TODO: Review - Flag transactions above this amount
-        'min_amount': 0.01,    # TODO: Review - Flag transactions below this amount (potential data errors)
-        'max_transactions_per_window': 10,  # TODO: Review - Max transactions per user in the time window
-        'velocity_check_enabled': True,  # Enable velocity-based fraud detection
+        'max_amount': 15000.0,
+        'min_amount': 0.01,
+        # 'max_transactions_per_window': 10,  # TODO: Review - Max transactions per user in the time window
+        # 'velocity_check_enabled': True,  # Enable velocity-based fraud detection
     },
 
     # Inventory-based alerts
     'inventory': {
-        'low_stock_threshold': 50,  # TODO: Review - Alert when inventory drops below this
-        'critical_stock_threshold': 10,  # TODO: Review - Critical alert threshold
-        'out_of_stock_alert': True,  # Alert on out-of-stock items
+        'low_stock_threshold': 50,
+        'critical_stock_threshold': 10,
+        'out_of_stock_alert': True,
     },
 
     # Cart abandonment detection
     'cart_abandonment': {
-        'timeout_minutes': 1,  # TODO: Review - Consider cart abandoned after this time
+        'timeout_minutes': 10,
         'min_cart_value': 25.0,
         'track_high_value_carts': True,
     },
@@ -144,11 +144,11 @@ SPARK_CONFIG = {
     'log_level': 'ERROR',
 
     # Streaming configurations
-    'trigger_interval': '10 seconds',  # TODO: Review - How often to process micro-batches
-    'max_offsets_per_trigger': 10000,  # TODO: Review - Max records to process per batch
+    'trigger_interval': '10 seconds',
+    'max_offsets_per_trigger': 10000,
 
     # Performance tuning
-    'shuffle_partitions': 8,  # TODO: Review - Adjust based on cluster size
+    'shuffle_partitions': 8,
 }
 
 # Alert Configuration
@@ -165,7 +165,7 @@ ALERT_CONFIG = {
         'file'     # Write to log file
     ],
     'batch_alerts': True,  # Batch similar alerts to reduce noise
-    'alert_cooldown_seconds': 60,  # TODO: Review - Minimum time between similar alerts
+    'alert_cooldown_seconds': 60,
 }
 
 # Dashboard Configuration
