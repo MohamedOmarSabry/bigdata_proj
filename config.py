@@ -76,8 +76,8 @@ ANOMALY_DETECTION = {
     'transaction': {
         'max_amount': 8000.0,
         'min_amount': 0.01,
-        # 'max_transactions_per_window': 10,  # TODO: Review - Max transactions per user in the time window
-        # 'velocity_check_enabled': True,  # Enable velocity-based fraud detection
+        'max_transactions_per_minute': 5,  # Max transactions per user per minute
+        'velocity_window_minutes': 5,  # Time window to check transaction velocity
     },
 
     # Inventory-based alerts
