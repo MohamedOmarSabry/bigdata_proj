@@ -38,6 +38,21 @@ recent_events = {
     'inventory_alerts': deque(maxlen=100),  # Recent product records for inventory display
     'abandoned_carts': deque(maxlen=50),    # Recent abandoned carts
     'alerts': deque(maxlen=100),            # General alerts from all sources
+    'sessions': deque(maxlen=200),          # Recent individual sessions for display
+}
+
+# Latest session summary stats (from stream processing, not recalculated)
+session_summary_stats = {
+    'total_sessions': 0,
+    'unique_users': 0,
+    'avg_session_duration_seconds': 0,
+    'avg_activities_per_session': 0,
+    'avg_views_per_session': 0,
+    'conversion_rate': 0,
+    'cart_abandonment_rate': 0,
+    'converted_sessions': 0,
+    'cart_abandoned_sessions': 0,
+    'last_updated': None
 }
 
 # Lock for thread-safe cache access
@@ -81,7 +96,25 @@ def consume_kafka_topic(topic_name, cache_key):
 
                 # Add to cache and update counters (thread-safe)
                 with cache_lock:
-                    recent_events[cache_key].append(data)
+                    # Handle session messages specially - separate summary from individual sessions
+                    if cache_key == 'sessions':
+                        if data.get('message_type') == 'session_summary':
+                            # Update the global session summary stats
+                            session_summary_stats['total_sessions'] = data.get('total_sessions', 0)
+                            session_summary_stats['unique_users'] = data.get('unique_users', 0)
+                            session_summary_stats['avg_session_duration_seconds'] = data.get('avg_session_duration_seconds', 0)
+                            session_summary_stats['avg_activities_per_session'] = data.get('avg_activities_per_session', 0)
+                            session_summary_stats['avg_views_per_session'] = data.get('avg_views_per_session', 0)
+                            session_summary_stats['conversion_rate'] = data.get('conversion_rate', 0)
+                            session_summary_stats['cart_abandonment_rate'] = data.get('cart_abandonment_rate', 0)
+                            session_summary_stats['converted_sessions'] = data.get('converted_sessions', 0)
+                            session_summary_stats['cart_abandoned_sessions'] = data.get('cart_abandoned_sessions', 0)
+                            session_summary_stats['last_updated'] = data.get('processed_at')
+                        else:
+                            # Individual session - add to recent sessions deque
+                            recent_events[cache_key].append(data)
+                    else:
+                        recent_events[cache_key].append(data)
 
                     # Increment counters based on event type
                     if cache_key == 'anomalies' and data.get('is_anomaly'):
@@ -115,6 +148,7 @@ def start_kafka_consumers():
         KAFKA_CONFIG['topics']['metrics_anomalies']: 'anomalies',
         KAFKA_CONFIG['topics']['metrics_inventory_alerts']: 'inventory_alerts',
         KAFKA_CONFIG['topics']['metrics_abandoned_carts']: 'abandoned_carts',
+        KAFKA_CONFIG['topics']['metrics_sessions']: 'sessions',
         KAFKA_CONFIG['topics']['alerts']: 'alerts',
     }
 
@@ -426,6 +460,56 @@ def get_abandoned_carts():
             'recent_events': data  # Recent events for display
         })
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sessions')
+def get_sessions():
+    """Get session analysis data from Kafka stream"""
+    try:
+        time_window_hours = DASHBOARD_CONFIG.get('time_window_hours', 0)
+
+        with cache_lock:
+            data = list(recent_events['sessions'])
+            # Get the authoritative summary stats from stream processing
+            summary = dict(session_summary_stats)
+
+        # Apply time filter for recent sessions display
+        data = apply_time_filter(data, time_window_hours)
+
+        # Deduplicate sessions by session_id (take latest data for each session)
+        sessions_by_id = {}
+        for item in data:
+            session_id = item.get('session_id')
+            if session_id:
+                # Keep the most recent data for each session
+                sessions_by_id[session_id] = item
+
+        sessions = list(sessions_by_id.values())
+
+        # Sort sessions by start time (newest first)
+        sessions.sort(key=lambda x: x.get('session_start', ''), reverse=True)
+
+        # Calculate browse_only from summary stats
+        browse_only = summary['total_sessions'] - summary['converted_sessions'] - summary['cart_abandoned_sessions']
+
+        return jsonify({
+            'sessions': sessions[:50],  # Return latest 50 sessions for display
+            'summary': {
+                'total_sessions': summary['total_sessions'],
+                'converted_sessions': summary['converted_sessions'],
+                'cart_abandoned_sessions': summary['cart_abandoned_sessions'],
+                'browse_only_sessions': max(0, browse_only),
+                'conversion_rate': round(summary['conversion_rate'], 1),
+                'avg_duration_seconds': round(summary['avg_session_duration_seconds'], 0),
+                'avg_views_per_session': round(summary['avg_views_per_session'], 1),
+                'avg_activities_per_session': round(summary['avg_activities_per_session'], 1)
+            }
+        })
+    except Exception as e:
+        print(f"Error in sessions: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 

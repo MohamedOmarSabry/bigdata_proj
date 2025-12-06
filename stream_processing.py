@@ -61,6 +61,9 @@ from real_time_analytics import (
     aggregate_sales_by_country
 )
 
+# Session Analysis imports
+from session_analysis import process_sessions_batch
+
 
 
 # SCHEMA DEFINITIONS
@@ -610,8 +613,33 @@ def start_streaming_pipeline():
         .foreachBatch(process_cart_abandonment_batch) \
         .option("checkpointLocation", PATHS['checkpoint_cart_abandonment']) \
         .start()
-        
-        
+
+    # =========================================================================
+    # SESSION ANALYSIS STREAM
+    # =========================================================================
+    print("Starting Session Analysis Stream...")
+
+    # Create a dedicated view stream for session analysis
+    # Triggered by new views but analyzes all stored activities
+    kafka_view_sessions_df = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
+        .option("subscribe", KAFKA_CONFIG['topics']['views']) \
+        .option("kafka.group.id", "globalmart-session-analyzer") \
+        .option("startingOffsets", "latest") \
+        .load()
+
+    view_for_sessions = kafka_view_sessions_df \
+        .selectExpr("CAST(value AS STRING) as json") \
+        .select(from_json(col("json"), view_schema).alias("data")) \
+        .select("data.*")
+
+    session_analysis_writer = view_for_sessions.writeStream \
+        .outputMode("append") \
+        .foreachBatch(process_sessions_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_sessions']) \
+        .start()
+
     print("\n" + "=" * 60)
     print("All Streaming Pipelines Started Successfully")
     print("\nSpark UI: http://localhost:4040")

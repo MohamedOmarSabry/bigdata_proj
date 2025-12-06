@@ -315,6 +315,18 @@
                 <div id="countrySalesTable" class="loading">Loading...</div>
             </div>
         </div>
+
+        <!-- Session Analysis Section -->
+        <div class="content-grid">
+            <div class="card">
+                <h2>Session Summary</h2>
+                <div id="sessionSummary" class="loading">Loading...</div>
+            </div>
+            <div class="card">
+                <h2>Recent Sessions</h2>
+                <div id="sessionsTable" class="loading">Loading...</div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -663,6 +675,92 @@
             }
         }
 
+        // Format duration in human readable format
+        function formatDuration(seconds) {
+            if (!seconds || seconds < 0) return '0s';
+            if (seconds < 60) return Math.round(seconds) + 's';
+            if (seconds < 3600) return Math.round(seconds / 60) + 'm ' + Math.round(seconds % 60) + 's';
+            return Math.round(seconds / 3600) + 'h ' + Math.round((seconds % 3600) / 60) + 'm';
+        }
+
+        // Update session summary
+        async function updateSessions() {
+            try {
+                const response = await fetch('/api/sessions');
+                const data = await response.json();
+                const summaryDiv = document.getElementById('sessionSummary');
+                const tableDiv = document.getElementById('sessionsTable');
+
+                if (data.summary) {
+                    const s = data.summary;
+                    summaryDiv.innerHTML = `
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                            <div style="padding: 15px; background: #f0f7ff; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold; color: #4b9cd3;">${s.total_sessions}</div>
+                                <div style="color: #666; font-size: 12px;">Total Sessions</div>
+                            </div>
+                            <div style="padding: 15px; background: #e8f5e9; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold; color: #2ecc71;">${s.conversion_rate}%</div>
+                                <div style="color: #666; font-size: 12px;">Conversion Rate</div>
+                            </div>
+                            <div style="padding: 15px; background: #fff3e0; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold; color: #ffb347;">${formatDuration(s.avg_duration_seconds)}</div>
+                                <div style="color: #666; font-size: 12px;">Avg Duration</div>
+                            </div>
+                            <div style="padding: 15px; background: #fce4ec; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 28px; font-weight: bold; color: #e91e63;">${s.avg_views_per_session}</div>
+                                <div style="color: #666; font-size: 12px;">Avg Views/Session</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px; font-size: 12px;">
+                            <span style="margin-right: 15px;"><strong>Converted:</strong> ${s.converted_sessions}</span>
+                            <span style="margin-right: 15px;"><strong>Cart Abandoned:</strong> ${s.cart_abandoned_sessions}</span>
+                            <span><strong>Browse Only:</strong> ${s.browse_only_sessions}</span>
+                        </div>
+                    `;
+                } else {
+                    summaryDiv.innerHTML = '<p>No session data available</p>';
+                }
+
+                if (data.sessions && data.sessions.length > 0) {
+                    tableDiv.innerHTML = `
+                        <div class="table-wrapper">
+                            <table style="font-size: 11px;">
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Duration</th>
+                                        <th>Views</th>
+                                        <th>Cart</th>
+                                        <th>Type</th>
+                                        <th>Path</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.sessions.slice(0, 20).map(session => `
+                                        <tr>
+                                            <td title="${session.session_id}">${session.user_id ? session.user_id.substring(0, 12) : 'N/A'}...</td>
+                                            <td>${formatDuration(session.duration_seconds)}</td>
+                                            <td>${session.view_count || 0}</td>
+                                            <td>${session.cart_count || 0}</td>
+                                            <td><span class="badge ${session.session_type === 'converted' ? 'high' : session.session_type === 'cart_abandoned' ? 'low' : ''}" style="background: ${session.session_type === 'converted' ? '#2ecc71' : session.session_type === 'cart_abandoned' ? '#ffb347' : '#95a5a6'};">${session.session_type || 'unknown'}</span></td>
+                                            <td title="${session.activity_path || ''}">${(session.activity_path || '').substring(0, 30)}${(session.activity_path || '').length > 30 ? '...' : ''}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    tableDiv.innerHTML = '<p>No sessions available</p>';
+                }
+            } catch (error) {
+                console.error('Error updating sessions:', error);
+                document.getElementById('sessionSummary').innerHTML = '<p>Error loading session data</p>';
+                document.getElementById('sessionsTable').innerHTML = '<p>Error loading session data</p>';
+            }
+        }
+
         // Update all dashboard data
         function updateDashboard() {
             updateSummary();
@@ -673,6 +771,7 @@
             updateCategorySales();
             updateAbandonedCarts();
             updateCountrySales();
+            updateSessions();
         }
 
         // Initial load

@@ -42,7 +42,10 @@ PATHS = {
     'checkpoint_cart_abandonment': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'cart_abandonment'),
     'checkpoint_transaction_anomalies': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'transaction_anomalies'),
     'checkpoint_inventory_alerts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'inventory_alerts'),
+    'checkpoint_sessions': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'sessions'),
 
+    # Session data storage
+    'clean_sessions': os.path.join(BASE_DIR, 'Staging', 'clean', 'sessions'),
 }
 
 # KAFKA CONFIGURATION
@@ -62,6 +65,7 @@ KAFKA_CONFIG = {
         'metrics_anomalies': 'globalmart.metrics.anomalies',
         'metrics_inventory_alerts': 'globalmart.metrics.inventory_alerts',
         'metrics_abandoned_carts': 'globalmart.metrics.abandoned_carts',
+        'metrics_sessions': 'globalmart.metrics.sessions',
         'alerts': 'globalmart.alerts',
     },
 }
@@ -70,7 +74,7 @@ KAFKA_CONFIG = {
 ANOMALY_DETECTION = {
     # Transaction-based anomalies
     'transaction': {
-        'max_amount': 15000.0,
+        'max_amount': 8000.0,
         'min_amount': 0.01,
         # 'max_transactions_per_window': 10,  # TODO: Review - Max transactions per user in the time window
         # 'velocity_check_enabled': True,  # Enable velocity-based fraud detection
@@ -86,14 +90,14 @@ ANOMALY_DETECTION = {
     # Cart abandonment detection
     'cart_abandonment': {
         'timeout_minutes': 15,
-        'min_cart_value': 2000.0,
+        'min_cart_value': 3000.0,
         'track_high_value_carts': True,
     },
 
-    # Session-based anomalies
+    # Session analysis configuration
     'session': {
-        'max_products_viewed': 100,  # TODO: Review - Flag if user views too many products (bot detection)
-        'session_timeout_minutes': 60,  # TODO: Review - Session expires after this
+        'timeout_minutes': 30,  # Session expires after 30 minutes of inactivity
+        'max_products_viewed': 100,  # Flag if user views too many products (bot detection)
     }
 }
 
