@@ -22,6 +22,7 @@ PATHS = {
     'clean_views': os.path.join(BASE_DIR, 'Staging', 'clean', 'views'),
     'clean_carts': os.path.join(BASE_DIR, 'Staging', 'clean', 'carts'),
     'clean_transactions': os.path.join(BASE_DIR, 'Staging', 'clean', 'transactions'),
+    'clean_abandoned_carts': os.path.join(BASE_DIR, 'Staging', 'clean', 'abandoned_carts'),
 
     # Quarantine subdirectories - for rejected/error records
     'quarantine_users': os.path.join(BASE_DIR, 'Staging', 'quarantine', 'users'),

@@ -356,8 +356,7 @@ def process_cart_abandonment_batch(batch_df, batch_id):
     """
     Detect abandoned carts by checking SAVED carts (from staging) against transactions.
     
-    The current batch is used only to trigger the check - we look at ALL saved carts
-    that are old enough and haven't been matched to a transaction.
+    Only flags NEW abandoned carts - tracks already-processed carts to avoid duplicates.
     """
     from pyspark.sql.functions import expr
     
@@ -416,21 +415,40 @@ def process_cart_abandonment_batch(batch_df, batch_id):
         print(f"[Batch {batch_id}] Cart Abandonment: No transaction data, all old carts abandoned")
         abandoned_carts = old_carts
     
-    abandoned_count = abandoned_carts.count()
+    # **FIX: Filter out carts already reported as abandoned**
+    try:
+        already_reported_df = spark.read.parquet(PATHS['clean_abandoned_carts'])
+        # Only keep carts NOT in already_reported
+        new_abandoned = abandoned_carts.join(
+            already_reported_df.select("cart_id"),
+            on="cart_id",
+            how="left_anti"
+        )
+    except Exception:
+        # First run - no previously reported carts
+        print(f"[Batch {batch_id}] Cart Abandonment: First run, no tracking file yet")
+        new_abandoned = abandoned_carts
+    
+    abandoned_count = new_abandoned.count()
     
     if abandoned_count > 0:
         # Add metadata
-        result_df = abandoned_carts \
+        result_df = new_abandoned \
             .withColumnRenamed("timestamp", "cart_timestamp") \
             .withColumn("abandonment_status", lit("abandoned")) \
             .withColumn("detected_at", current_timestamp()) \
             .withColumn("timeout_minutes", lit(timeout_minutes)) \
             .withColumn("batch_id", lit(batch_id))
         
+        # **Write to Kafka for dashboard**
         write_to_kafka(result_df, KAFKA_CONFIG['topics']['metrics_abandoned_carts'])
-        print(f"[Batch {batch_id}] Cart Abandonment: {abandoned_count} abandoned carts detected!")
+        
+        # **Save to tracking file to prevent re-reporting**
+        result_df.write.mode("append").parquet(PATHS['clean_abandoned_carts'])
+        
+        print(f"[Batch {batch_id}] Cart Abandonment: {abandoned_count} NEW abandoned carts detected!")
     else:
-        print(f"[Batch {batch_id}] Cart Abandonment: {old_count} old carts checked, all have matching transactions")
+        print(f"[Batch {batch_id}] Cart Abandonment: {old_count} old carts checked, all already reported or have transactions")
 
 
 
