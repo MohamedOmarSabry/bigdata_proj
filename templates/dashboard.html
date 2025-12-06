@@ -392,24 +392,26 @@
 
                 if (data.recent_events && data.recent_events.length > 0) {
                     table.innerHTML = `
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Transaction ID</th>
-                                    <th>Amount</th>
-                                    <th>Type</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.recent_events.map(item => `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
                                     <tr>
-                                        <td>${item.transaction_id}</td>
-                                        <td>${formatCurrency(item.total_amount)}</td>
-                                        <td><span class="badge ${item.transaction_anomaly}">${item.transaction_anomaly}</span></td>
+                                        <th>Transaction ID</th>
+                                        <th>Amount</th>
+                                        <th>Type</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    ${data.recent_events.map(item => `
+                                        <tr>
+                                            <td>${item.transaction_id}</td>
+                                            <td>${formatCurrency(item.total_amount)}</td>
+                                            <td><span class="badge ${item.transaction_anomaly}">${item.transaction_anomaly}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
                     `;
                 } else {
                     table.innerHTML = '<p>No anomalies detected</p>';
@@ -454,6 +456,34 @@
                     // Render the accumulated history
                     if (inventoryAlertsHistory.length > 0) {
                         table.innerHTML = `
+                            <div class="table-wrapper">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Product ID</th>
+                                            <th>Inventory</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${inventoryAlertsHistory.map(item => `
+                                            <tr>
+                                                <td>${item.product_id}</td>
+                                                <td>${item.inventory}</td>
+                                                <td><span class="badge ${item.inventory_status}">${item.inventory_status}</span></td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    } else {
+                        table.innerHTML = '<p>No inventory alerts</p>';
+                    }
+                } else if (inventoryAlertsHistory.length > 0) {
+                    // Keep showing existing alerts even if API returns empty
+                    table.innerHTML = `
+                        <div class="table-wrapper">
                             <table>
                                 <thead>
                                     <tr>
@@ -472,31 +502,7 @@
                                     `).join('')}
                                 </tbody>
                             </table>
-                        `;
-                    } else {
-                        table.innerHTML = '<p>No inventory alerts</p>';
-                    }
-                } else if (inventoryAlertsHistory.length > 0) {
-                    // Keep showing existing alerts even if API returns empty
-                    table.innerHTML = `
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Product ID</th>
-                                    <th>Inventory</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${inventoryAlertsHistory.map(item => `
-                                    <tr>
-                                        <td>${item.product_id}</td>
-                                        <td>${item.inventory}</td>
-                                        <td><span class="badge ${item.inventory_status}">${item.inventory_status}</span></td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                        </div>
                     `;
                 } else {
                     table.innerHTML = '<p>No inventory alerts</p>';
@@ -516,30 +522,32 @@
 
                 if (data.data && data.data.length > 0) {
                     table.innerHTML = `
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Hour</th>
-                                    <th>Sales</th>
-                                    <th>Transactions</th>
-                                    <th>Unique Customers</th>
-                                    <th>Avg Value</th>
-                                    <th>Sales Velocity</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.data.map(item => `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
                                     <tr>
-                                        <td>${item.hour}:00</td>
-                                        <td>${formatCurrency(item.total_sales)}</td>
-                                        <td>${item.transaction_count}</td>
-                                        <td>${item.unique_customers || 0}</td>
-                                        <td>${formatCurrency(item.avg_transaction_value || 0)}</td>
-                                        <td>${formatCurrency((item.sales_velocity || 0))}/sec</td>
+                                        <th>Hour</th>
+                                        <th>Sales</th>
+                                        <th>Transactions</th>
+                                        <th>Unique Customers</th>
+                                        <th>Avg Value</th>
+                                        <th>Sales Velocity</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    ${data.data.map(item => `
+                                        <tr>
+                                            <td>${item.hour}:00</td>
+                                            <td>${formatCurrency(item.total_sales)}</td>
+                                            <td>${item.transaction_count}</td>
+                                            <td>${item.unique_customers || 0}</td>
+                                            <td>${formatCurrency(item.avg_transaction_value || 0)}</td>
+                                            <td>${formatCurrency((item.sales_velocity || 0))}/sec</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
                     `;
                 } else {
                     table.innerHTML = '<p>No sales data available</p>';
@@ -559,32 +567,34 @@
 
                 if (data.data && data.data.length > 0) {
                     table.innerHTML = `
-                        <table style="font-size: 11px;">
-                            <thead>
-                                <tr>
-                                    <th>Category</th>
-                                    <th>Revenue</th>
-                                    <th>Units</th>
-                                    <th>Trans</th>
-                                    <th>Prods</th>
-                                    <th>Cust</th>
-                                    <th>Avg $</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.data.map(item => `
+                        <div class="table-wrapper">
+                            <table style="font-size: 11px;">
+                                <thead>
                                     <tr>
-                                        <td>${item.category}</td>
-                                        <td>${formatCurrency(item.total_revenue)}</td>
-                                        <td>${item.total_units_sold}</td>
-                                        <td>${item.transaction_count}</td>
-                                        <td>${item.unique_products || 0}</td>
-                                        <td>${item.total_unique_customers || 0}</td>
-                                        <td>${formatCurrency(item.avg_product_price || 0)}</td>
+                                        <th>Category</th>
+                                        <th>Revenue</th>
+                                        <th>Units</th>
+                                        <th>Trans</th>
+                                        <th>Prods</th>
+                                        <th>Cust</th>
+                                        <th>Avg $</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    ${data.data.map(item => `
+                                        <tr>
+                                            <td>${item.category}</td>
+                                            <td>${formatCurrency(item.total_revenue)}</td>
+                                            <td>${item.total_units_sold}</td>
+                                            <td>${item.transaction_count}</td>
+                                            <td>${item.unique_products || 0}</td>
+                                            <td>${item.total_unique_customers || 0}</td>
+                                            <td>${formatCurrency(item.avg_product_price || 0)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
                     `;
                 } else {
                     table.innerHTML = '<p>No category data available</p>';
@@ -604,24 +614,26 @@
 
                 if (data.recent_events && data.recent_events.length > 0) {
                     table.innerHTML = `
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Cart ID</th>
-                                    <th>User ID</th>
-                                    <th>Value</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.recent_events.map(item => `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
                                     <tr>
-                                        <td>${item.cart_id}</td>
-                                        <td>${item.user_id}</td>
-                                        <td>${formatCurrency(item.cart_value)}</td>
+                                        <th>Cart ID</th>
+                                        <th>User ID</th>
+                                        <th>Value</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    ${data.recent_events.map(item => `
+                                        <tr>
+                                            <td>${item.cart_id}</td>
+                                            <td>${item.user_id}</td>
+                                            <td>${formatCurrency(item.cart_value)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
                     `;
                 } else {
                     table.innerHTML = '<p>No abandoned carts detected</p>';
@@ -641,30 +653,32 @@
 
                 if (data.data && data.data.length > 0) {
                     table.innerHTML = `
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Country</th>
-                                    <th>Sales</th>
-                                    <th>Transactions</th>
-                                    <th>Customers</th>
-                                    <th>Avg Value</th>
-                                    <th>Sales %</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.data.map(item => `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
                                     <tr>
-                                        <td>${item.country}</td>
-                                        <td>${formatCurrency(item.total_sales)}</td>
-                                        <td>${item.transaction_count}</td>
-                                        <td>${item.unique_customers || 0}</td>
-                                        <td>${formatCurrency(item.avg_transaction_value || 0)}</td>
-                                        <td>${(item.sales_percentage || 0).toFixed(1)}%</td>
+                                        <th>Country</th>
+                                        <th>Sales</th>
+                                        <th>Transactions</th>
+                                        <th>Customers</th>
+                                        <th>Avg Value</th>
+                                        <th>Sales %</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    ${data.data.map(item => `
+                                        <tr>
+                                            <td>${item.country}</td>
+                                            <td>${formatCurrency(item.total_sales)}</td>
+                                            <td>${item.transaction_count}</td>
+                                            <td>${item.unique_customers || 0}</td>
+                                            <td>${formatCurrency(item.avg_transaction_value || 0)}</td>
+                                            <td>${(item.sales_percentage || 0).toFixed(1)}%</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
                     `;
                 } else {
                     table.innerHTML = '<p>No country data available</p>';
