@@ -1,0 +1,12 @@
+Flask
+itsdangerous
+Jinja2
+kafka-python
+numpy
+pandas
+py4j
+pyspark
+pytz
+six
+tzdata
+Werkzeug
