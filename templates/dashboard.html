@@ -345,8 +345,8 @@
                 const data = await response.json();
                 const alertsList = document.getElementById('alertsList');
 
-                if (data.alerts && data.alerts.length > 0) {
-                    alertsList.innerHTML = data.alerts.map(alert => `
+                if (data.recent_events && data.recent_events.length > 0) {
+                    alertsList.innerHTML = data.recent_events.map(alert => `
                         <div class="alert-item ${alert.severity}">
                             <div class="alert-time">${formatTime(alert.timestamp)}</div>
                             <div class="alert-message">[${alert.type.toUpperCase()}] ${alert.message}</div>
@@ -368,7 +368,7 @@
                 const data = await response.json();
                 const table = document.getElementById('anomaliesTable');
 
-                if (data.data && data.data.length > 0) {
+                if (data.recent_events && data.recent_events.length > 0) {
                     table.innerHTML = `
                         <table>
                             <tr>
@@ -376,7 +376,7 @@
                                 <th>Amount</th>
                                 <th>Type</th>
                             </tr>
-                            ${data.data.slice(0, 10).map(item => `
+                            ${data.recent_events.slice(0, 10).map(item => `
                                 <tr>
                                     <td>${item.transaction_id}</td>
                                     <td>${formatCurrency(item.total_amount)}</td>
@@ -402,9 +402,9 @@
                 const table = document.getElementById('inventoryTable');
                 const MAX_ALERTS = 20; // Configurable limit
 
-                if (data.data && data.data.length > 0) {
+                if (data.recent_events && data.recent_events.length > 0) {
                     // Find new alerts that we haven't seen before
-                    const newAlerts = data.data.filter(item => {
+                    const newAlerts = data.recent_events.filter(item => {
                         // Create unique key using product_id and timestamp (if available)
                         const key = `${item.product_id}_${item.processed_at || item.timestamp || ''}`;
 
@@ -560,7 +560,7 @@
                 const data = await response.json();
                 const table = document.getElementById('abandonedCartsTable');
 
-                if (data.data && data.data.length > 0) {
+                if (data.recent_events && data.recent_events.length > 0) {
                     table.innerHTML = `
                         <table>
                             <tr>
@@ -568,7 +568,7 @@
                                 <th>User ID</th>
                                 <th>Value</th>
                             </tr>
-                            ${data.data.slice(0, 10).map(item => `
+                            ${data.recent_events.slice(0, 10).map(item => `
                                 <tr>
                                     <td>${item.cart_id}</td>
                                     <td>${item.user_id}</td>
