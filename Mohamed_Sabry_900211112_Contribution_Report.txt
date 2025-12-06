@@ -1,0 +1,90 @@
+Personal Contributions to the Project:
+
+Data Generation and Ingestion:
+
+data_generator.py:
+
+Implemented multi-threaded Kafka producers with dynamic throughput based on thread count to follow the 500 events per second and 1.16 transaction event per second requirements
+
+Designed event models for users, product views, carts, and transactions.
+
+Added fault-injection logic for robustness testing under corrupted/invalid data.
+
+Built a product catalog generator (250,000 products, 100 categories).
+
+Ensured deterministic randomness using seeds for reproducibility.
+
+Added run-forever simulation mode and graceful shutdown logic.
+
+data_listener.py:
+
+Monitoring dashboard that:
+
+Consumes all Kafka topics in parallel.
+
+Tracking real-time throughput.
+
+Showing per-topic message counts.
+
+Displays a sample entry per topic.
+
+Batch Processing and Data Warehouse:
+
+Designed the Star Schema for the data warehouse
+
+Dimension tables (User, Product, Date, Time, UserPref)
+
+Bridge tables (User preference bridge)
+
+Fact tables (Views, Carts, Transactions)
+
+batch_processing.py:
+
+Implemented ETL workflow
+
+Configured Spark streaming readers for all parquet staging directories.
+
+Wrote foreachBatch processors for each entity type.
+
+Applied validation, timestamp parsing, and error-handling logic.
+
+SCD Type 2 Implementation for Products
+
+Implemented the requested queries from the star schema
+
+Technical challenges and how they were solved:
+
+Changing product inventories --> SCD 2 implementation
+
+Simulating realistic data --> addition of data fault simulation
+
+Data generation without the need to pregenerate data --> deterministic data generation
+
+Key learnings and skills developed:
+
+Kafka usage in python
+
+Pyspark usage for streaming and batching
+
+Star schema design
+
+SCD Type 2 implementation
+
+Postgres semnatics
+
+4.3 Key Learnings and Skills Developed
+Technical Skills
+
+Kafka Producer/Consumer API (multi-threading, topic management, throughput tuning)
+
+Spark Structured Streaming (foreachBatch, schema design, checkpointing)
+
+PostgreSQL Data Warehouse Modeling
+
+Star schema design
+
+SCD Type-2 implementation
+
+Peer evaluation of team members:
+
+Did good even if they starting working late
