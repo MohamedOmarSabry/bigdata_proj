@@ -17,6 +17,8 @@ import time
 import json
 import shutil, os
 from pyspark.sql.functions import explode
+
+from config import PATHS
 def define_user_schema():
     return StructType([
         StructField("user_id", StringType(), True),
@@ -655,8 +657,8 @@ def ETL_batch():
         print(f"[ETL] Processing Products batch {batch_id} with {products_df.count()} rows")
         products_df.printSchema()
         products_df.show(1,truncate=False)
-        views_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/views/")
-        transactions_df = spark.read.parquet("file:///home/m/Desktop/bigdata_proj/Staging/transactions/")
+        views_df = spark.read.parquet(PATHS['clean_views'])
+        transactions_df = spark.read.parquet(PATHS['clean_transactions'])
         product_first_seen_df = views_df.groupBy("product_id") \
         .agg(min(col("timestamp")).alias("valid_from"))
         products_df = products_df.join(product_first_seen_df, on="product_id", how="left") \
@@ -688,13 +690,13 @@ def ETL_batch():
         spark.readStream
             .format("parquet")
             .schema(user_schema)
-            .load("file:///home/m/Desktop/bigdata_proj/Staging/users/")
+            .load(PATHS['clean_users'])
     )
     user_writer = (
     users_stream
         .writeStream
         .foreachBatch(process_users_stream)
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/users_etl/")
+        .option("checkpointLocation", PATHS['checkpoints'])
         .trigger(once=True)
         .start()
     )
@@ -704,13 +706,13 @@ def ETL_batch():
         spark.readStream
             .format("parquet")
             .schema(view_schema)
-            .load("file:///home/m/Desktop/bigdata_proj/Staging/views/")
+            .load(PATHS['clean_views'])
     )
     views_writer = ( 
     views_stream
         .writeStream
         .foreachBatch(process_views_stream)
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/views_etl/")
+        .option("checkpointLocation", PATHS['checkpoints_views'])
         .trigger(once=True)
         .start()
     )
@@ -720,13 +722,13 @@ def ETL_batch():
         spark.readStream
             .format("parquet")
             .schema(cart_schema)
-            .load("file:///home/m/Desktop/bigdata_proj/Staging/carts/")
+            .load(PATHS['clean_carts'])
     )
     carts_writer = ( 
     carts_stream
         .writeStream
         .foreachBatch(process_carts_stream)
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/carts_etl/")
+        .option("checkpointLocation", PATHS['checkpoints_carts'])
         .trigger(once=True)
         .start()
     )
@@ -736,13 +738,13 @@ def ETL_batch():
         spark.readStream
             .format("parquet")
             .schema(transaction_schema)
-            .load("file:///home/m/Desktop/bigdata_proj/Staging/transactions/")
+            .load(PATHS['clean_transactions'])
     )
     transactions_writer = ( 
     transactions_stream
         .writeStream
         .foreachBatch(process_transactions_stream)
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/transactions_etl/")
+        .option("checkpointLocation", PATHS['checkpoints_transactions'])
         .trigger(once=True)
         .start()
     )
@@ -752,13 +754,13 @@ def ETL_batch():
         spark.readStream
             .format("parquet")
             .schema(product_schema)
-            .load("file:///home/m/Desktop/bigdata_proj/Staging/products/")
+            .load(PATHS['clean_products'])
     )
     products_writer = (
     products_stream
         .writeStream
         .foreachBatch(process_products_stream)
-        .option("checkpointLocation", "file:///home/m/Desktop/bigdata_proj/Staging/checkpoints/products_etl/")
+        .option("checkpointLocation", PATHS['checkpoints_products'])
         .trigger(once=True)
         .start()
     )
