@@ -31,13 +31,13 @@ metrics_counters = {
 
 # Bounded deques for storing recent event details (for display)
 recent_events = {
-    'sales_hourly': deque(maxlen=100),
-    'sales_category': deque(maxlen=100),
-    'sales_country': deque(maxlen=100),
-    'anomalies': deque(maxlen=100),
-    'inventory_alerts': deque(maxlen=100),
-    'abandoned_carts': deque(maxlen=100),
-    'alerts': deque(maxlen=100),
+    'sales_hourly': deque(maxlen=24), 
+    'sales_category': deque(maxlen=50),
+    'sales_country': deque(maxlen=5),
+    'anomalies': deque(maxlen=50),
+    'inventory_alerts': deque(maxlen=50),
+    'abandoned_carts': deque(maxlen=50),
+    'alerts': deque(maxlen=50),
 }
 
 # Lock for thread-safe cache access
@@ -201,7 +201,7 @@ def get_recent_alerts():
         alerts.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
 
         return jsonify({
-            'recent_events': alerts[:20],
+            'recent_events': alerts,
             'count': len(alerts)
         })
     except Exception as e:
@@ -378,7 +378,7 @@ def get_anomalies():
 
         return jsonify({
             'count': total_count,  # Stable counter
-            'recent_events': anomalies[:20]  # Recent events for display
+            'recent_events': anomalies  # Recent events for display
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -402,7 +402,7 @@ def get_inventory_alerts():
 
         return jsonify({
             'count': total_count,  # Stable counter
-            'recent_events': alerts[:20]  # Recent events for display
+            'recent_events': alerts  # Recent events for display
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -423,7 +423,7 @@ def get_abandoned_carts():
 
         return jsonify({
             'count': total_count,  # Stable counter
-            'recent_events': data[:20]  # Recent events for display
+            'recent_events': data  # Recent events for display
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

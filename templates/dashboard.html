@@ -376,7 +376,7 @@
                                 <th>Amount</th>
                                 <th>Type</th>
                             </tr>
-                            ${data.recent_events.slice(0, 10).map(item => `
+                            ${data.recent_events.map(item => `
                                 <tr>
                                     <td>${item.transaction_id}</td>
                                     <td>${formatCurrency(item.total_amount)}</td>
@@ -491,7 +491,7 @@
                                 <th>Avg Value</th>
                                 <th>Sales Velocity</th>
                             </tr>
-                            ${data.data.slice(0, 10).map(item => `
+                            ${data.data.map(item => `
                                 <tr>
                                     <td>${item.hour}:00</td>
                                     <td>${formatCurrency(item.total_sales)}</td>
@@ -531,7 +531,7 @@
                                 <th>Cust</th>
                                 <th>Avg $</th>
                             </tr>
-                            ${data.data.slice(0, 10).map(item => `
+                            ${data.data.map(item => `
                                 <tr>
                                     <td>${item.category}</td>
                                     <td>${formatCurrency(item.total_revenue)}</td>
@@ -568,7 +568,7 @@
                                 <th>User ID</th>
                                 <th>Value</th>
                             </tr>
-                            ${data.recent_events.slice(0, 10).map(item => `
+                            ${data.recent_events.map(item => `
                                 <tr>
                                     <td>${item.cart_id}</td>
                                     <td>${item.user_id}</td>
@@ -604,7 +604,7 @@
                                 <th>Avg Value</th>
                                 <th>Sales %</th>
                             </tr>
-                            ${data.data.slice(0, 10).map(item => `
+                            ${data.data.map(item => `
                                 <tr>
                                     <td>${item.country}</td>
                                     <td>${formatCurrency(item.total_sales)}</td>
