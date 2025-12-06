@@ -334,8 +334,10 @@ class GlobalMartProducer:
         print(f"Started {num_threads} producer threads")
         try:
             if run_seconds is None:
-                while True:
+                print("Running indefinitely... Press Ctrl+C to stop.")
+                while self.running:
                     time.sleep(1)
+
             else:
                 time.sleep(run_seconds)
         except KeyboardInterrupt:
@@ -362,5 +364,5 @@ if __name__ == "__main__":
         'system_error_rate': 0.01,
     }
     producer = GlobalMartProducer(config=config)
-    producer.start_simulation(num_threads=5, run_seconds=60)
+    producer.start_simulation(num_threads=4, run_seconds=None)
     #producer.start_simulation(num_sensors=5)
