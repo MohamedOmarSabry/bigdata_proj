@@ -1,3 +1,23 @@
+"""
+Main Spark Structured Streaming application organized into three parts:
+
+Data Ingestion, Validation & Staging
+    - Reads raw data from Kafka topics
+    - Validates using data_quality.py
+    - Writes clean data to staging area (Parquet)
+    - Quarantines invalid records
+
+Real-Time Metrics Aggregation
+    - Aggregates sales by hour, category, and country
+    - Publishes metrics to Kafka for dashboard consumption
+
+Anomaly Detection & Alerts
+    - Transaction anomaly detection
+    - Low inventory alerts
+    - Cart abandonment detection
+    - Session Analysis
+"""
+
 import os
 import sys
 
@@ -5,25 +25,20 @@ import sys
 pyspark_path = os.path.join(sys.prefix, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages', 'pyspark')
 os.environ['SPARK_HOME'] = pyspark_path
 
-from pyspark.sql.functions import col, current_timestamp, unix_timestamp
-
 from pyspark.sql import SparkSession
-from datetime import datetime, timedelta
 from pyspark.sql.functions import (
-    from_json, col, window, avg, count, current_timestamp,
-    expr, lit, to_json, struct
+    from_json, col, current_timestamp, to_json, struct, to_timestamp, lit,
+    explode, sum as spark_sum
 )
 from pyspark.sql.types import (
     StructType, StructField, StringType,
-    DoubleType, TimestampType, ArrayType,IntegerType
+    DoubleType, ArrayType, IntegerType
 )
-from threading import Thread
-import time
-import json
-import shutil, os
-from pyspark.sql.functions import explode
+import shutil
 
-from config import KAFKA_CONFIG, PATHS, SPARK_CONFIG, ANOMALY_DETECTION, ALERT_CONFIG
+from config import KAFKA_CONFIG, PATHS, SPARK_CONFIG, ANOMALY_DETECTION
+
+# Data Quality imports (Pipeline A)
 from data_quality import (
     validate_users,
     validate_products,
@@ -31,17 +46,25 @@ from data_quality import (
     validate_carts,
     validate_transactions
 )
+
+# Real-Time Analytics imports (Pipeline B & C)
 from real_time_analytics import (
+    # Anomaly detection
     detect_transaction_anomalies,
     detect_low_inventory,
+    # Alert generation
     generate_transaction_alerts,
     generate_inventory_alerts,
+    # Sales aggregation
     aggregate_sales_by_hour,
     aggregate_sales_by_category,
     aggregate_sales_by_country
 )
 
-# Schema Definitions
+
+
+# SCHEMA DEFINITIONS
+
 def define_user_schema():
     return StructType([
         StructField("user_id", StringType(), True),
@@ -51,6 +74,7 @@ def define_user_schema():
         StructField("registration_date", StringType(), True),
         StructField("preferences", ArrayType(StringType()), True)
     ])
+
 def define_product_schema():
     return StructType([
         StructField("product_id", StringType(), True),
@@ -58,12 +82,14 @@ def define_product_schema():
         StructField("inventory", IntegerType(), True),
         StructField("category", StringType(), True)
     ])
+
 def define_cart_product_schema():
     return StructType([
         StructField("product_id", StringType(), True),
         StructField("price", DoubleType(), True),
         StructField("quantity", IntegerType(), True),
     ])
+
 def define_view_schema():
     return StructType([
         StructField("event_id", StringType(), True),
@@ -71,6 +97,7 @@ def define_view_schema():
         StructField("user_id", StringType(), True),
         StructField("timestamp", StringType(), True)
     ])
+
 def define_cart_schema():
     return StructType([
         StructField("cart_id", StringType(), True),
@@ -78,6 +105,7 @@ def define_cart_schema():
         StructField("timestamp", StringType(), True),
         StructField("products", ArrayType(define_cart_product_schema()), True)
     ])
+
 def define_transaction_schema():
     return StructType([
         StructField("transaction_id", StringType(), True),
@@ -88,405 +116,522 @@ def define_transaction_schema():
         StructField("products", ArrayType(define_cart_product_schema()), True)
     ])
 
-# Create Spark Session
+
+# =============================================================================
+# SPARK SESSION
+# =============================================================================
 
 def create_spark_session():
-    """Create Spark session"""
+    """Create and configure Spark session"""
     return SparkSession.builder \
         .appName(SPARK_CONFIG['app_name']) \
         .config("spark.jars.packages", SPARK_CONFIG['packages']) \
         .config("spark.sql.shuffle.partitions", SPARK_CONFIG['shuffle_partitions']) \
         .getOrCreate()
 
-# Helper function to write metrics to Kafka
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
 def write_to_kafka(df, topic_name):
     """
-    Write DataFrame to Kafka topic as JSON
+    Write DataFrame to Kafka topic as JSON.
+    Used by metrics and alert pipelines to publish to dashboard topics.
     """
-    # Select all columns and convert to JSON
     json_df = df.select(to_json(struct(*[col(c) for c in df.columns])).alias("value"))
-
-    # Write to Kafka
     json_df.write \
         .format("kafka") \
         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
         .option("topic", topic_name) \
         .save()
 
-# Processing Functions - read from Kafka, validate using functions from data_quality, then write to disk in designated folders
 
-def process_user_batch(batch_df, batch_id):
-    """Process user data batch"""
+# =============================================================================
+# DATA INGESTION, VALIDATION & STAGING
+# =============================================================================
+
+def ingest_users_batch(batch_df, batch_id):
+    """
+    Validates user records and writes clean/quarantine Parquet files.
+    """
     if batch_df.count() > 0:
-        # Apply data quality validation
         clean_df, quarantine_df = validate_users(batch_df)
 
-        # Write clean data
+        # Write clean data to staging
         clean_df.write.mode("append").parquet(PATHS['clean_users'])
+        print(f"[Batch {batch_id}] Users Staging: {clean_df.count()} clean records written")
 
         # Write quarantined data
         if quarantine_df.count() > 0:
             quarantine_df.write.mode("append").parquet(PATHS['quarantine_users'])
-            print(f"[Batch {batch_id}] Users: {quarantine_df.count()} records quarantined")
+            print(f"[Batch {batch_id}] Users Staging: {quarantine_df.count()} records quarantined")
 
-        print(f"[Batch {batch_id}] Users: {clean_df.count()} clean records written")
 
-def process_product_batch(batch_df, batch_id):
-    """Process product data batch with inventory monitoring"""
+def ingest_products_batch(batch_df, batch_id):
+    """
+    Validates product records and writes clean/quarantine Parquet files.
+    """
     if batch_df.count() > 0:
-        # Apply data quality validation
         clean_df, quarantine_df = validate_products(batch_df)
 
-        # Write clean data
+        # Write clean data to staging
         clean_df.write.mode("append").parquet(PATHS['clean_products'])
+        print(f"[Batch {batch_id}] Products Staging: {clean_df.count()} clean records written")
 
         # Write quarantined data
         if quarantine_df.count() > 0:
             quarantine_df.write.mode("append").parquet(PATHS['quarantine_products'])
-            print(f"[Batch {batch_id}] Products: {quarantine_df.count()} records quarantined")
+            print(f"[Batch {batch_id}] Products Staging: {quarantine_df.count()} records quarantined")
 
-        # Detect low inventory on clean data
-        inventory_df = detect_low_inventory(clean_df)
 
-        # Generate alerts for low inventory
-        generate_inventory_alerts(inventory_df)
-
-        # Write inventory alerts to Kafka stream
-        write_to_kafka(inventory_df, KAFKA_CONFIG['topics']['metrics_inventory_alerts'])
-
-        # Count alerts for logging
-        alert_count = inventory_df.filter(col("needs_alert") == True).count()
-        if alert_count > 0:
-            print(f"[Batch {batch_id}] Products: {alert_count} inventory alerts generated and sent to Kafka")
-
-        print(f"[Batch {batch_id}] Products: {clean_df.count()} clean records written")
-
-def process_view_batch(batch_df, batch_id):
-    """Process product view data batch"""
+def ingest_views_batch(batch_df, batch_id):
+    """
+    Validates view records and writes clean/quarantine Parquet files.
+    """
     if batch_df.count() > 0:
-        # Apply data quality validation
         clean_df, quarantine_df = validate_views(batch_df)
 
-        # Write clean data
+        # Write clean data to staging
         clean_df.write.mode("append").parquet(PATHS['clean_views'])
+        print(f"[Batch {batch_id}] Views Staging: {clean_df.count()} clean records written")
 
         # Write quarantined data
         if quarantine_df.count() > 0:
             quarantine_df.write.mode("append").parquet(PATHS['quarantine_views'])
-            print(f"[Batch {batch_id}] Views: {quarantine_df.count()} records quarantined")
+            print(f"[Batch {batch_id}] Views Staging: {quarantine_df.count()} records quarantined")
 
-        print(f"[Batch {batch_id}] Views: {clean_df.count()} clean records written")
 
-def process_cart_batch(batch_df, batch_id):
-    """Process cart data batch"""
+def ingest_carts_batch(batch_df, batch_id):
+    """
+    Validates cart records and writes clean/quarantine Parquet files.
+    """
     if batch_df.count() > 0:
-        # Apply data quality validation
         clean_df, quarantine_df = validate_carts(batch_df)
 
-        # Write clean data
+        # Write clean data to staging
         clean_df.write.mode("append").parquet(PATHS['clean_carts'])
+        print(f"[Batch {batch_id}] Carts Staging: {clean_df.count()} clean records written")
 
         # Write quarantined data
         if quarantine_df.count() > 0:
             quarantine_df.write.mode("append").parquet(PATHS['quarantine_carts'])
-            print(f"[Batch {batch_id}] Carts: {quarantine_df.count()} records quarantined")
+            print(f"[Batch {batch_id}] Carts Staging: {quarantine_df.count()} records quarantined")
 
-        print(f"[Batch {batch_id}] Carts: {clean_df.count()} clean records written")
-    
-def process_transaction_batch(batch_df, batch_id):
-    """Process transaction data batch with anomaly detection"""
+
+def ingest_transactions_batch(batch_df, batch_id):
+    """
+    Validates transaction records and writes clean/quarantine Parquet files.
+    """
     if batch_df.count() > 0:
-        # Apply data quality validation
         clean_df, quarantine_df = validate_transactions(batch_df)
 
-        # Write clean data
+        # Write clean data to staging
         clean_df.write.mode("append").parquet(PATHS['clean_transactions'])
+        print(f"[Batch {batch_id}] Transactions Staging: {clean_df.count()} clean records written")
 
         # Write quarantined data
         if quarantine_df.count() > 0:
             quarantine_df.write.mode("append").parquet(PATHS['quarantine_transactions'])
-            print(f"[Batch {batch_id}] Transactions: {quarantine_df.count()} records quarantined")
+            print(f"[Batch {batch_id}] Transactions Staging: {quarantine_df.count()} records quarantined")
 
-        # Detect transaction anomalies on clean data
-        anomaly_df = detect_transaction_anomalies(clean_df)
 
-        # Generate alerts for detected anomalies
-        generate_transaction_alerts(anomaly_df)
+# =============================================================================
+# REAL-TIME METRICS AGGREGATION
+# =============================================================================
 
-        # Write anomaly data to Kafka stream
-        write_to_kafka(anomaly_df, KAFKA_CONFIG['topics']['metrics_anomalies'])
-
-        # Count anomalies for logging
-        anomaly_count = anomaly_df.filter(col("is_anomaly") == True).count()
-        if anomaly_count > 0:
-            print(f"[Batch {batch_id}] Transactions: {anomaly_count} anomalies detected and sent to Kafka")
-
-        print(f"[Batch {batch_id}] Transactions: {clean_df.count()} clean records written")
-
-# Streaming Analytics Functions - process clean data and generates real-time metrics, writes to Kafka topics
-
-def process_sales_aggregation_batch(batch_df, batch_id):
-    """Process sales aggregation for each batch"""
+def process_sales_metrics_batch(batch_df, batch_id):
+    """
+    Aggregate and publish sales metrics.
+    Computes hourly, category, and country metrics and sends to Kafka.
+    """
     if batch_df.count() > 0:
-        # Read clean product and user data for enrichment
-        try:
-            product_df = batch_df.sparkSession.read.parquet(PATHS['clean_products'])
-            user_df = batch_df.sparkSession.read.parquet(PATHS['clean_users'])
-        except:
-            product_df = None
-            user_df = None
-            print(f"[Batch {batch_id}] Sales Aggregation: No product/user data available yet")
+        spark = batch_df.sparkSession
 
-        # Aggregate by hour
-        hourly_metrics = aggregate_sales_by_hour(batch_df)
-        # Add processing timestamp for time-based windowing
-        hourly_metrics = hourly_metrics.withColumn("processed_at", current_timestamp())
+        # Convert timestamp string to TimestampType for aggregation
+        batch_with_ts = batch_df.withColumn("timestamp", to_timestamp(col("timestamp")))
 
-        # Write to Kafka stream
+        # --- Hourly Metrics ---
+        # Each batch produces hourly aggregates for transactions in THAT batch
+        hourly_metrics = aggregate_sales_by_hour(batch_with_ts)
+        hourly_metrics = hourly_metrics \
+            .withColumn("batch_id", lit(batch_id)) \
+            .withColumn("processed_at", current_timestamp())
         write_to_kafka(hourly_metrics, KAFKA_CONFIG['topics']['metrics_sales_hourly'])
-        print(f"[Batch {batch_id}] Sales Aggregation: Hourly metrics sent to Kafka")
+        print(f"[Batch {batch_id}] Sales Metrics: Hourly metrics sent to Kafka")
 
-        # Aggregate by category (if product data available)
-        if product_df is not None:
-            category_metrics = aggregate_sales_by_category(batch_df, product_df)
-            # Add processing timestamp for time-based windowing
-            category_metrics = category_metrics.withColumn("processed_at", current_timestamp())
-
-            # Write to Kafka stream
-            write_to_kafka(category_metrics, KAFKA_CONFIG['topics']['metrics_sales_category'])
-            print(f"[Batch {batch_id}] Sales Aggregation: Category metrics sent to Kafka")
-
-        # Aggregate by country/region (if user data available)
-        if user_df is not None:
-            country_metrics = aggregate_sales_by_country(batch_df, user_df)
-            # Add processing timestamp for time-based windowing
-            country_metrics = country_metrics.withColumn("processed_at", current_timestamp())
-
-            # Write to Kafka stream
-            write_to_kafka(country_metrics, KAFKA_CONFIG['topics']['metrics_sales_country'])
-            print(f"[Batch {batch_id}] Sales Aggregation: Country metrics sent to Kafka")
-
-def process_cart_abandonment_batch(cart_batch_df, batch_id):
-    """Process cart abandonment detection - simplified batch approach"""
-    if cart_batch_df.count() > 0:
+        # --- Category Metrics ---
         try:
-            from pyspark.sql.functions import explode, sum as spark_sum
+            product_df = spark.read.parquet(PATHS['clean_products'])
+            category_metrics = aggregate_sales_by_category(batch_with_ts, product_df)
+            category_metrics = category_metrics \
+                .withColumn("batch_id", lit(batch_id)) \
+                .withColumn("processed_at", current_timestamp())
+            write_to_kafka(category_metrics, KAFKA_CONFIG['topics']['metrics_sales_category'])
+            print(f"[Batch {batch_id}] Sales Metrics: Category metrics sent to Kafka")
+        except Exception:
+            print(f"[Batch {batch_id}] Sales Metrics: No product data available yet for category metrics")
 
-            # Calculate cart values
-            cart_with_value = cart_batch_df.withColumn("product", explode("products")) \
-                .withColumn("item_total", col("product.price") * col("product.quantity")) \
-                .groupBy("cart_id", "user_id", "timestamp") \
-                .agg(spark_sum("item_total").alias("cart_value"))
+        # --- Country/Region Metrics ---
+        try:
+            user_df = spark.read.parquet(PATHS['clean_users'])
+            country_metrics = aggregate_sales_by_country(batch_with_ts, user_df)
+            country_metrics = country_metrics \
+                .withColumn("batch_id", lit(batch_id)) \
+                .withColumn("processed_at", current_timestamp())
+            write_to_kafka(country_metrics, KAFKA_CONFIG['topics']['metrics_sales_country'])
+            print(f"[Batch {batch_id}] Sales Metrics: Country metrics sent to Kafka")
+        except Exception:
+            print(f"[Batch {batch_id}] Sales Metrics: No user data available yet for country metrics")
 
-            # Filter high-value carts (threshold from config)
-            high_value_carts = cart_with_value.filter(col("cart_value") >= ANOMALY_DETECTION['cart_abandonment']['min_cart_value'])
 
-            if high_value_carts.count() > 0:
-                # Write to Kafka stream
-                write_to_kafka(high_value_carts, KAFKA_CONFIG['topics']['metrics_abandoned_carts'])
-                print(f"[Batch {batch_id}] Cart Tracking: {high_value_carts.count()} high-value carts sent to Kafka")
-        except Exception as e:
-            print(f"[Batch {batch_id}] Cart Tracking: Error - {e}")
+# =============================================================================
+# ANOMALY DETECTION & ALERTS
+# =============================================================================
 
-# Main Streaming Pipeline
-def start_streaming_pl():
-    print("\n" + "="*60)
-    print("Starting Spark Streaming Backend")
-    print("="*60)
+def process_transaction_anomalies_batch(batch_df, batch_id):
+    """
+    Detect transaction anomalies and generate alerts.
+    ONLY anomalous transactions go to metrics_anomalies topic.
+    """
+    if batch_df.count() > 0:
+        # Detect anomalies (adds is_anomaly, transaction_anomaly, anomaly_detected_at columns)
+        anomaly_df = detect_transaction_anomalies(batch_df)
+
+        # Filter to ONLY actual anomalies
+        # This is critical - writing all transactions floods the dashboard deque
+        # with normal transactions, pushing out actual anomalies
+        anomalies_only_df = anomaly_df.filter(col("is_anomaly") == True)
+
+        anomaly_count = anomalies_only_df.count()
+        if anomaly_count > 0:
+            # Add batch_id for dashboard tracking
+            anomalies_only_df = anomalies_only_df.withColumn("batch_id", lit(batch_id))
+
+            # Generate alerts (sends to Kafka alerts topic + console/file)
+            generate_transaction_alerts(anomalies_only_df)
+
+            # Write ONLY anomalies to metrics topic for dashboard
+            write_to_kafka(anomalies_only_df, KAFKA_CONFIG['topics']['metrics_anomalies'])
+
+            print(f"[Batch {batch_id}] Transaction Anomalies: {anomaly_count} anomalies detected and sent to Kafka")
+        else:
+            print(f"[Batch {batch_id}] Transaction Anomalies: {batch_df.count()} transactions processed, no anomalies")
+
+
+def process_inventory_alerts_batch(batch_df, batch_id):
+    """
+    Detect low inventory and generate alerts.
+    Flags out-of-stock, critical, and low inventory products.
+    """
+    if batch_df.count() > 0:
+        # Detect low inventory (adds inventory_status, needs_alert, alert_timestamp columns)
+        inventory_df = detect_low_inventory(batch_df)
+
+        # Filter to ONLY items that need alerts
+        # This is critical - writing all products floods the dashboard deque with
+        # normal-inventory items, pushing out actual alerts
+        alerts_only_df = inventory_df.filter(col("needs_alert") == True)
+
+        alert_count = alerts_only_df.count()
+        if alert_count > 0:
+            # Add batch_id for dashboard tracking
+            alerts_only_df = alerts_only_df.withColumn("batch_id", lit(batch_id))
+
+            # Generate alerts (sends to Kafka alerts topic + console/file)
+            generate_inventory_alerts(alerts_only_df)
+
+            # Write ONLY alerts to metrics topic for dashboard
+            write_to_kafka(alerts_only_df, KAFKA_CONFIG['topics']['metrics_inventory_alerts'])
+
+            print(f"[Batch {batch_id}] Inventory Alerts: {alert_count} low inventory alerts generated")
+        else:
+            print(f"[Batch {batch_id}] Inventory Status: {batch_df.count()} products processed, all normal")
+
+
+def process_cart_abandonment_batch(batch_df, batch_id):
+    """
+    Detect abandoned carts by checking SAVED carts (from staging) against transactions.
     
+    The current batch is used only to trigger the check - we look at ALL saved carts
+    that are old enough and haven't been matched to a transaction.
+    """
+    from pyspark.sql.functions import expr
+    
+    spark = batch_df.sparkSession
+    timeout_minutes = ANOMALY_DETECTION['cart_abandonment']['timeout_minutes']
+    min_cart_value = ANOMALY_DETECTION['cart_abandonment']['min_cart_value']
+    
+    # Read ALL saved carts from staging (not just current batch)
+    try:
+        all_carts_df = spark.read.parquet(PATHS['clean_carts'])
+    except Exception as e:
+        print(f"[Batch {batch_id}] Cart Abandonment: No cart data in staging yet ({e})")
+        return
+    
+    # Convert timestamp to proper type
+    all_carts_df = all_carts_df.withColumn("timestamp", to_timestamp(col("timestamp")))
+    
+    # Calculate cart values
+    cart_with_value = all_carts_df \
+        .withColumn("product", explode("products")) \
+        .withColumn("item_total", col("product.price") * col("product.quantity")) \
+        .groupBy("cart_id", "user_id", "timestamp") \
+        .agg(spark_sum("item_total").alias("cart_value"))
+    
+    # Filter to high-value carts
+    high_value_carts = cart_with_value.filter(col("cart_value") >= min_cart_value)
+    
+    if high_value_carts.count() == 0:
+        print(f"[Batch {batch_id}] Cart Abandonment: No high-value carts in staging")
+        return
+    
+    # Filter carts that are OLD ENOUGH to be considered abandoned
+    old_carts = high_value_carts.filter(
+        col("timestamp") < expr(f"current_timestamp() - INTERVAL {timeout_minutes} MINUTES")
+    )
+    
+    old_count = old_carts.count()
+    if old_count == 0:
+        print(f"[Batch {batch_id}] Cart Abandonment: No carts older than {timeout_minutes} min yet")
+        return
+    
+    # Check against transactions to exclude carts where user completed purchase
+    try:
+        transactions_df = spark.read.parquet(PATHS['clean_transactions'])
+        transactions_df = transactions_df.withColumn("timestamp", to_timestamp(col("timestamp")))
+        
+        # left_anti join: keep carts where NO matching transaction exists
+        abandoned_carts = old_carts.alias("cart").join(
+            transactions_df.select("user_id", "timestamp").alias("trans"),
+            (col("cart.user_id") == col("trans.user_id")) &
+            (col("trans.timestamp") >= col("cart.timestamp")),
+            how="left_anti"
+        )
+    except Exception as e:
+        # No transaction data - all old carts are abandoned
+        print(f"[Batch {batch_id}] Cart Abandonment: No transaction data, all old carts abandoned")
+        abandoned_carts = old_carts
+    
+    abandoned_count = abandoned_carts.count()
+    
+    if abandoned_count > 0:
+        # Add metadata
+        result_df = abandoned_carts \
+            .withColumnRenamed("timestamp", "cart_timestamp") \
+            .withColumn("abandonment_status", lit("abandoned")) \
+            .withColumn("detected_at", current_timestamp()) \
+            .withColumn("timeout_minutes", lit(timeout_minutes)) \
+            .withColumn("batch_id", lit(batch_id))
+        
+        write_to_kafka(result_df, KAFKA_CONFIG['topics']['metrics_abandoned_carts'])
+        print(f"[Batch {batch_id}] Cart Abandonment: {abandoned_count} abandoned carts detected!")
+    else:
+        print(f"[Batch {batch_id}] Cart Abandonment: {old_count} old carts checked, all have matching transactions")
+
+
+
+# =============================================================================
+# MAIN STREAMING PIPELINE
+# =============================================================================
+
+def start_streaming_pipeline():
+    """
+    Main function to start all streaming pipelines.
+    """
+    print("\n" + "=" * 60)
+    print("GlobalMart Stream Processing Pipeline")
+    print("=" * 60)
+
     spark = create_spark_session()
     spark.sparkContext.setLogLevel("ERROR")
 
-    # =========== Read Streams for Batch Processing ===========
-    # User Stream
-    kafka_user_df = (
-    spark.readStream
-         .format("kafka")
-         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
-         .option("subscribe", KAFKA_CONFIG['topics']['users'])
-         .option("kafka.group.id", "globalmart-user-streamer")
-         .option("startingOffsets", "latest")
-         .load()
-    )
-        
-    user_schema = define_user_schema()
+    # =========================================================================
+    # READ STREAMS FROM KAFKA
+    # =========================================================================
 
-    # Parse JSON
+    # --- User Stream ---
+    kafka_user_df = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
+        .option("subscribe", KAFKA_CONFIG['topics']['users']) \
+        .option("kafka.group.id", "globalmart-user-streamer") \
+        .option("startingOffsets", "latest") \
+        .load()
+
+    user_schema = define_user_schema()
     parsed_user_df = kafka_user_df \
         .selectExpr("CAST(value AS STRING) as json") \
         .select(from_json(col("json"), user_schema).alias("data")) \
         .select("data.*")
-    
-    # Write to memory table for querying
-    user_writer = (parsed_user_df
-        .writeStream
-        .outputMode("append")
-        .foreachBatch(process_user_batch) # validates and writes to disk
-        .option("checkpointLocation", PATHS['checkpoint_users'])
-        .start()
-        )
-    
-    # Product Stream
-    
-    kafka_product_df = (
-    spark.readStream
-         .format("kafka")
-         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
-         .option("subscribe", KAFKA_CONFIG['topics']['products'])
-         .option("kafka.group.id", "globalmart-product-streamer")
-         .option("startingOffsets", "latest")
-         .load()
-    )
+
+    # --- Product Stream ---
+    kafka_product_df = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
+        .option("subscribe", KAFKA_CONFIG['topics']['products']) \
+        .option("kafka.group.id", "globalmart-product-streamer") \
+        .option("startingOffsets", "latest") \
+        .load()
 
     product_schema = define_product_schema()
-    # Parse JSON
     parsed_product_df = kafka_product_df \
         .selectExpr("CAST(value AS STRING) as json") \
         .select(from_json(col("json"), product_schema).alias("data")) \
         .select("data.*")
-    
-    # Write to memory table for querying
-    product_writer = (parsed_product_df
-        .writeStream
-        .outputMode("append")
-        .foreachBatch(process_product_batch) # validates and writes to disk
-        .option("checkpointLocation", PATHS['checkpoint_products'])
-        .start()
-        )
-    
-    # Product View Stream
-    kafka_view_df = (
-    spark.readStream
-         .format("kafka")
-         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
-         .option("subscribe", KAFKA_CONFIG['topics']['views'])
-         .option("kafka.group.id", "globalmart-product-view-streamer")
-         .option("startingOffsets", "latest")
-         .load()
-    )
+
+    # --- Product View Stream ---
+    kafka_view_df = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
+        .option("subscribe", KAFKA_CONFIG['topics']['views']) \
+        .option("kafka.group.id", "globalmart-view-streamer") \
+        .option("startingOffsets", "latest") \
+        .load()
+
     view_schema = define_view_schema()
-    # Parse JSON
     parsed_view_df = kafka_view_df \
         .selectExpr("CAST(value AS STRING) as json") \
         .select(from_json(col("json"), view_schema).alias("data")) \
         .select("data.*")
-    
-    # Write to memory table for querying
-    views_writer = (parsed_view_df
-        .writeStream
-        .outputMode("append")
-        .foreachBatch(process_view_batch) # validates and writes to disk
-        .option("checkpointLocation", PATHS['checkpoint_views'])
-        .start()
-        )
-    
-    # Cart Stream
-    kafka_cart_df = (
-    spark.readStream
-         .format("kafka")
-         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
-         .option("subscribe", KAFKA_CONFIG['topics']['carts'])
-         .option("kafka.group.id", "globalmart-cart-streamer")
-         .option("startingOffsets", "latest")
-         .load()
-    )
 
+    # --- Cart Stream ---
+    kafka_cart_df = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
+        .option("subscribe", KAFKA_CONFIG['topics']['carts']) \
+        .option("kafka.group.id", "globalmart-cart-streamer") \
+        .option("startingOffsets", "latest") \
+        .load()
 
     cart_schema = define_cart_schema()
-    # Parse JSON
     parsed_cart_df = kafka_cart_df \
         .selectExpr("CAST(value AS STRING) as json") \
         .select(from_json(col("json"), cart_schema).alias("data")) \
         .select("data.*")
-    
-    # Write to memory table for querying
-    cart_writer = (parsed_cart_df
-        .writeStream
-        .outputMode("append")
-        .format("parquet")
-        .foreachBatch(process_cart_batch) # validates and writes to disk
-        .option("checkpointLocation", PATHS['checkpoint_carts'])
-        .start()
-        )
-    
-    # Transaction Stream
-    kafka_transaction_df = (
-    spark.readStream
-         .format("kafka")
-         .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers'])
-         .option("subscribe", KAFKA_CONFIG['topics']['transactions'])
-         .option("kafka.group.id", "globalmart-transaction-streamer")
-         .option("startingOffsets", "latest")
-         .load()
-    )
+
+    # --- Transaction Stream ---
+    kafka_transaction_df = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
+        .option("subscribe", KAFKA_CONFIG['topics']['transactions']) \
+        .option("kafka.group.id", "globalmart-transaction-streamer") \
+        .option("startingOffsets", "latest") \
+        .load()
+
     transaction_schema = define_transaction_schema()
-    # Parse JSON
     parsed_transaction_df = kafka_transaction_df \
         .selectExpr("CAST(value AS STRING) as json") \
         .select(from_json(col("json"), transaction_schema).alias("data")) \
         .select("data.*")
-    
-    # Write to memory table for querying
-    transaction_writer = (parsed_transaction_df
-        .writeStream
-        .outputMode("append")
-        .format("parquet")
-        .foreachBatch(process_transaction_batch) # validates and writes to disk
-        .option("checkpointLocation", PATHS['checkpoint_transactions'])
+
+    # =========================================================================
+    # DATA QUALITY / STAGING STREAMS
+    # =========================================================================
+    print("\nStarting Data Quality / Staging Streams...")
+
+    user_staging_writer = parsed_user_df.writeStream \
+        .outputMode("append") \
+        .foreachBatch(ingest_users_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_users']) \
         .start()
-        )
 
-
-    # =========== Publish Real-time Analytics Streams ===========
-    # Sales Aggregation
-    # Process clean transactions for sales metrics (hourly, category, country)
-    sales_aggregation_writer = (parsed_transaction_df
-        .writeStream
-        .outputMode("append")
-        .foreachBatch(process_sales_aggregation_batch)
-        .option("checkpointLocation", PATHS['checkpoint_sales_aggregation'])
+    product_staging_writer = parsed_product_df.writeStream \
+        .outputMode("append") \
+        .foreachBatch(ingest_products_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_products']) \
         .start()
-        )
 
-    # Cart Abandonment Detection
-    # Process carts and detect abandonment using transaction data
-    cart_abandonment_writer = (parsed_cart_df
-        .writeStream
-        .outputMode("append")
-        .foreachBatch(process_cart_abandonment_batch)
-        .option("checkpointLocation", PATHS['checkpoint_cart_abandonment'])
+    view_staging_writer = parsed_view_df.writeStream \
+        .outputMode("append") \
+        .foreachBatch(ingest_views_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_views']) \
         .start()
-        )
-    
 
-    print("\n✓ Streaming Pipeline Started")
-    print("  - Data Quality Streams: Users, Products, Views, Carts, Transactions")
-    print("  - Analytics Streams: Sales Aggregation, Cart Abandonment")
-    print("  - Spark UI: http://localhost:4040")
+    cart_staging_writer = parsed_cart_df.writeStream \
+        .outputMode("append") \
+        .foreachBatch(ingest_carts_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_carts']) \
+        .start()
 
-    user_writer.awaitTermination(10000)
-    product_writer.awaitTermination(10000)
-    views_writer.awaitTermination(10000)
-    cart_writer.awaitTermination(10000)
-    transaction_writer.awaitTermination(10000)
-    sales_aggregation_writer.awaitTermination(10000)
-    cart_abandonment_writer.awaitTermination(10000)
+    transaction_staging_writer = parsed_transaction_df.writeStream \
+        .outputMode("append") \
+        .foreachBatch(ingest_transactions_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_transactions']) \
+        .start()
+
+    # =========================================================================
+    # REAL-TIME METRICS STREAMS
+    # =========================================================================
+    print("Starting Real-Time Metrics Streams...")
+
+    sales_metrics_writer = parsed_transaction_df.writeStream \
+        .outputMode("append") \
+        .foreachBatch(process_sales_metrics_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_sales_aggregation']) \
+        .start()
+
+    # =========================================================================
+    # ANOMALY DETECTION & ALERT STREAMS
+    # =========================================================================
+    print("Starting Anomaly Detection & Alert Streams...")
+
+    # Transaction Anomaly Detection (separate stream on transactions)
+    transaction_anomaly_writer = parsed_transaction_df.writeStream \
+        .outputMode("append") \
+        .foreachBatch(process_transaction_anomalies_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_transaction_anomalies']) \
+        .start()
+
+    # Inventory Alert Detection (separate stream on products)
+    inventory_alert_writer = parsed_product_df.writeStream \
+        .outputMode("append") \
+        .foreachBatch(process_inventory_alerts_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_inventory_alerts']) \
+        .start()
+
+    # Create a dedicated cart stream for abandonment detection
+    kafka_cart_abandonment_df = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_CONFIG['bootstrap_servers']) \
+        .option("subscribe", KAFKA_CONFIG['topics']['carts']) \
+        .option("kafka.group.id", "globalmart-cart-abandonment") \
+        .option("startingOffsets", "latest") \
+        .load()
+
+    cart_for_abandonment = kafka_cart_abandonment_df \
+        .selectExpr("CAST(value AS STRING) as json") \
+        .select(from_json(col("json"), cart_schema).alias("data")) \
+        .select("data.*") \
+        .withColumn("timestamp", to_timestamp(col("timestamp")))
+
+    cart_abandonment_writer = cart_for_abandonment.writeStream \
+        .outputMode("append") \
+        .foreachBatch(process_cart_abandonment_batch) \
+        .option("checkpointLocation", PATHS['checkpoint_cart_abandonment']) \
+        .start()
+        
+        
+    print("\n" + "=" * 60)
+    print("All Streaming Pipelines Started Successfully")
+    print("\nSpark UI: http://localhost:4040")
+    print("=" * 60 + "\n")
+    spark.streams.awaitAnyTermination()
 
 if __name__ == "__main__":
     try:
-        # Clean old checkpoints if they exist
+        # Clean old checkpoints if they exist (for fresh start during development)
         CHECKPOINT_DIR = PATHS['checkpoints']
         if os.path.exists(CHECKPOINT_DIR):
             print(f"Removing old checkpoint dir: {CHECKPOINT_DIR}")
             shutil.rmtree(CHECKPOINT_DIR)
 
         # Start the streaming pipeline
-        start_streaming_pl()
+        start_streaming_pipeline()
 
     except KeyboardInterrupt:
-        print("\n\n⚠ Shutting down stream processing...")
+        print("\n\nShutting down stream processing...")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nError: {e}")
         import traceback
         traceback.print_exc()
-

@@ -36,14 +36,13 @@ PATHS = {
     'checkpoint_views': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'views'),
     'checkpoint_carts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'carts'),
     'checkpoint_transactions': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'transactions'),
-    'checkpoint_alerts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'alerts'),
-    'checkpoint_metrics': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'metrics'),
+    # 'checkpoint_alerts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'alerts'),
+    # 'checkpoint_metrics': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'metrics'),
     'checkpoint_sales_aggregation': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'sales_aggregation'),
     'checkpoint_cart_abandonment': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'cart_abandonment'),
+    'checkpoint_transaction_anomalies': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'transaction_anomalies'),
+    'checkpoint_inventory_alerts': os.path.join(BASE_DIR, 'Staging', 'checkpoints', 'inventory_alerts'),
 
-
-    # Alert logs
-    # 'alerts_log': os.path.join(BASE_DIR, 'Staging', 'alerts.log'),
 }
 
 # KAFKA CONFIGURATION
@@ -86,8 +85,8 @@ ANOMALY_DETECTION = {
 
     # Cart abandonment detection
     'cart_abandonment': {
-        'timeout_minutes': 10,
-        'min_cart_value': 25.0,
+        'timeout_minutes': 15,
+        'min_cart_value': 2000.0,
         'track_high_value_carts': True,
     },
 

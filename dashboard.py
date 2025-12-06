@@ -31,13 +31,13 @@ metrics_counters = {
 
 # Bounded deques for storing recent event details (for display)
 recent_events = {
-    'sales_hourly': deque(maxlen=24), 
-    'sales_category': deque(maxlen=50),
-    'sales_country': deque(maxlen=5),
-    'anomalies': deque(maxlen=50),
-    'inventory_alerts': deque(maxlen=50),
-    'abandoned_carts': deque(maxlen=50),
-    'alerts': deque(maxlen=50),
+    'sales_hourly': deque(maxlen=100),      # ~100 batches worth of hourly metrics
+    'sales_category': deque(maxlen=100),    # ~100 batches worth of category metrics
+    'sales_country': deque(maxlen=100),     # ~100 batches worth of country metrics (was 5, causing countries to disappear!)
+    'anomalies': deque(maxlen=100),         # Recent transaction records for anomaly display
+    'inventory_alerts': deque(maxlen=100),  # Recent product records for inventory display
+    'abandoned_carts': deque(maxlen=50),    # Recent abandoned carts
+    'alerts': deque(maxlen=100),            # General alerts from all sources
 }
 
 # Lock for thread-safe cache access
