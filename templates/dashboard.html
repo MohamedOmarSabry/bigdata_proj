@@ -134,6 +134,8 @@
             overflow-y: auto;
             overflow-x: auto;
             position: relative;
+            /* Ensure content clips under sticky header */
+            overflow: auto;
         }
 
         table {
@@ -157,8 +159,10 @@
             font-weight: 600;
             position: sticky;
             top: 0;
-            z-index: 100;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            /* Ensure header clips content underneath */
+            clip-path: inset(0);
         }
 
         tr:hover {
@@ -314,6 +318,10 @@
             return new Date(timestamp).toLocaleString();
         }
 
+        // Track seen inventory alerts (using product_id + timestamp as unique key)
+        let seenInventoryAlerts = new Set();
+        let inventoryAlertsHistory = [];
+
         // Update summary metrics
         async function updateSummary() {
             try {
@@ -386,14 +394,60 @@
             }
         }
 
-        // Update inventory alerts
+        // Update inventory alerts (accumulative with max limit)
         async function updateInventory() {
             try {
                 const response = await fetch('/api/inventory/alerts');
                 const data = await response.json();
                 const table = document.getElementById('inventoryTable');
+                const MAX_ALERTS = 20; // Configurable limit
 
                 if (data.data && data.data.length > 0) {
+                    // Find new alerts that we haven't seen before
+                    const newAlerts = data.data.filter(item => {
+                        // Create unique key using product_id and timestamp (if available)
+                        const key = `${item.product_id}_${item.processed_at || item.timestamp || ''}`;
+
+                        if (!seenInventoryAlerts.has(key)) {
+                            seenInventoryAlerts.add(key);
+                            return true;
+                        }
+                        return false;
+                    });
+
+                    // Add new alerts to the beginning of history (newest first)
+                    if (newAlerts.length > 0) {
+                        inventoryAlertsHistory = [...newAlerts, ...inventoryAlertsHistory];
+
+                        // Trim to max limit
+                        if (inventoryAlertsHistory.length > MAX_ALERTS) {
+                            inventoryAlertsHistory = inventoryAlertsHistory.slice(0, MAX_ALERTS);
+                        }
+                    }
+
+                    // Render the accumulated history
+                    if (inventoryAlertsHistory.length > 0) {
+                        table.innerHTML = `
+                            <table>
+                                <tr>
+                                    <th>Product ID</th>
+                                    <th>Inventory</th>
+                                    <th>Status</th>
+                                </tr>
+                                ${inventoryAlertsHistory.map(item => `
+                                    <tr>
+                                        <td>${item.product_id}</td>
+                                        <td>${item.inventory}</td>
+                                        <td><span class="badge ${item.inventory_status}">${item.inventory_status}</span></td>
+                                    </tr>
+                                `).join('')}
+                            </table>
+                        `;
+                    } else {
+                        table.innerHTML = '<p>No inventory alerts</p>';
+                    }
+                } else if (inventoryAlertsHistory.length > 0) {
+                    // Keep showing existing alerts even if API returns empty
                     table.innerHTML = `
                         <table>
                             <tr>
@@ -401,7 +455,7 @@
                                 <th>Inventory</th>
                                 <th>Status</th>
                             </tr>
-                            ${data.data.slice(0, 10).map(item => `
+                            ${inventoryAlertsHistory.map(item => `
                                 <tr>
                                     <td>${item.product_id}</td>
                                     <td>${item.inventory}</td>
