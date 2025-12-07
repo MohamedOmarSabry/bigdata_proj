@@ -415,7 +415,6 @@ def process_cart_abandonment_batch(batch_df, batch_id):
         print(f"[Batch {batch_id}] Cart Abandonment: No transaction data, all old carts abandoned")
         abandoned_carts = old_carts
     
-    # **FIX: Filter out carts already reported as abandoned**
     try:
         already_reported_df = spark.read.parquet(PATHS['clean_abandoned_carts'])
         # Only keep carts NOT in already_reported

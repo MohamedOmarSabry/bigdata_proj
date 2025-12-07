@@ -159,6 +159,14 @@ SPARK_CONFIG = {
 
     # Performance tuning
     'shuffle_partitions': 8,
+    'spark.sql.adaptive.enabled': 'true',
+    'spark.sql.adaptive.coalescePartitions.enabled': 'true',
+    
+    'spark.executor.instances': '4',           # Number of executors
+    'spark.executor.cores': '2',               # Cores per executor
+    'spark.executor.memory': '2g',             # Memory per executor
+    'spark.driver.memory': '2g',               # Driver memory
+    'spark.driver.cores': '2',                 # Driver cores
 }
 
 # Alert Configuration
