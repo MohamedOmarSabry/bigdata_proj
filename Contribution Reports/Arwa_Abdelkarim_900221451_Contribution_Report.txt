@@ -1,0 +1,85 @@
+4.1 PERSONAL CONTRIBUTIONS TO THE PROJECT
+
+I was responsible for implementing the Visualization & API Layer (Part 4) and 
+Infrastructure & Deployment (Part 5) components of the GlobalMart project.
+
+PART 4: VISUALIZATION AND API LAYER
+
+1. RESTful API Server 
+   - Developed a Flask-based REST API with 5 endpoints providing access to 
+     analytics data from the PostgreSQL data warehouse
+   - Endpoints implemented:
+     * /api/health - Health check endpoint for monitoring API availability
+     * /api/metrics/overview - Returns key business metrics (total revenue, 
+       transactions, customers, average order value)
+     * /api/sales/geographic - Provides sales data grouped by country for 
+       geographic visualization
+     * /api/products/category-performance - Returns top 10 product categories 
+       by revenue and transaction count
+     * /api/sales/trends - Delivers time-series sales data with configurable 
+       date ranges
+
+2. Interactive Data Explorer Dashboard 
+   - Built a web interface for exploring GlobalMart analytics data
+   - Provides visualization for executive dashboards and data exploration
+
+PART 5: INFRASTRUCTURE AND DEPLOYMENT
+
+3. System Monitoring Infrastructure
+   Implemented a comprehensive monitoring stack using Prometheus with three 
+   custom exporters:
+
+   A. Kafka Metrics Exporter
+      - Monitors Kafka broker health and availability (up/down status)
+      - Tracks topic-level metrics: partition counts, message rates per 
+        second, consumer lag
+
+   B. Spark Metrics Exporter 
+      - Monitors Spark Streaming application health via Spark UI REST API
+      - Tracks active/completed/failed jobs and stages
+      - Collects executor metrics including count, memory usage per executor, 
+        and driver memory
+
+   C. PostgreSQL Metrics Exporter
+      - Monitors data warehouse health and performance
+      - Collects connection metrics (active, idle, max connections)
+      - Tracks database and table sizes for all 7 data warehouse tables
+
+   D. Prometheus Configuration
+      - Configured Prometheus to scrape all three custom exporters every 
+        15 seconds
+
+4.3 KEY LEARNINGS AND SKILLS DEVELOPED
+
+TECHNICAL SKILLS:
+1. Monitoring Architecture Design - Learned to build production-grade 
+   monitoring using Prometheus exporters pattern, understanding the pull-based 
+   metrics collection model vs push-based systems
+
+2. RESTful API Development - Gained experience designing clean API endpoints 
+   with proper HTTP methods, status codes, and JSON response formatting
+
+3. Time-Series Metrics - Understood different Prometheus metric types (Gauge, 
+   Counter, Histogram) and when to use each for monitoring
+
+4. System Integration - Learned to integrate multiple technologies (Kafka, 
+   Spark, PostgreSQL, Prometheus, Grafana) into a cohesive monitoring solution
+
+5. Error Handling & Logging - Implemented comprehensive exception handling and 
+   logging for debugging production issues
+
+4.4 PEER EVALUATION OF TEAM MEMBERS
+Both worked really good. 
+
+
+4.5 PROJECT IMPACT SUMMARY
+
+My work enables real-time visibility into the entire GlobalMart platform—from 
+data ingestion (Kafka) through processing (Spark) to storage (PostgreSQL)—
+providing the operational intelligence needed for production systems.
+
+The monitoring stack I built collects 30+ metrics across three systems every 
+15 seconds, providing comprehensive observability that was critical for 
+troubleshooting integration issues during development and will be essential 
+for production operations.
+
